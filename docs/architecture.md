@@ -1,6 +1,6 @@
 # WalimApp — Consolidated Architecture Baseline
 
-- **Status:** Candidate Baseline v1.2-draft (Phase 0.2 — Pending Product Owner Approval)
+- **Status:** Candidate Baseline v1.3-draft (Phase 0.3 — Pending Product Owner Approval)
 - **Last Updated:** 2026-10-29
 - **Supersedes:** Historical drafts under [`reference/architecture-drafts/`](../reference/architecture-drafts/)
 - **Related Documents:** [Product Requirements](./product-requirements.md), [Architecture Review](./architecture-review.md), [Decision Register](./decision-register.md), [Roadmap](./roadmap.md), [Project Constitution](../.specify/memory/constitution.md).
@@ -9,15 +9,15 @@
 
 ## 1. System Context & Architectural Principles
 
-WalimApp is designed as a **two-codebase system** (plus a small offline operator CLI for standalone license signing) maintainable by a solo developer:
+WalimApp is designed as a **two-codebase system** (plus a small offline operator CLI for standalone license signing) maintainable by a solo developer, supporting **three languages (`ar-DZ` Arabic RTL, `fr-DZ` French LTR, and `en` English LTR)** across all user-facing surfaces:
 
-1. **`apps/owner` (Shared Flutter Client):** A single offline-first Flutter application compiled for **Android smartphones (`API 24+`)** and **Windows desktops (`x64`)**, backed by local encrypted **SQLite (`sqlite3mc` via Drift)**. It powers:
+1. **`apps/owner` (Shared Trilingual Flutter Client):** A single offline-first Flutter application compiled for **Android smartphones (`API 24+`)** and **Windows desktops (`x64`)**, backed by local encrypted **SQLite (`sqlite3mc` with explicit `chacha20` ChaCha20-Poly1305 256-bit AEAD via Drift)**. It powers:
    - **WalimApp Local:** A **single-device offline edition** (100% offline perpetual license; zero cross-device sharing).
-   - **WalimApp Connect:** The **shared multi-user, multi-device edition** synchronizing calendars, reservations, documents, and financial ledgers across multiple individually authenticated users on Android phones and Windows PCs.
+   - **WalimApp Connect:** The **connected offline-first edition** with configurable active-device tiers (**Basic: `1` active device**; **Higher-Capacity: up to `5` active devices** at a higher price) synchronizing calendars, reservations, documents, and financial ledgers across individually authenticated users with mandatory venue-scoped role permissions.
 2. **`backend` (Central Modular Monolith):** A single **Laravel** application backed by **PostgreSQL 17**, serving three surfaces from one deployment:
-   - **Connect Sync & REST API (`/api/v1/*`):** Token-authenticated endpoints for multi-device synchronization, binary asset sync, Local-to-Connect staged migration, licensing, and push wake-up pokes.
-   - **Public Marketplace (`/` in `ar-DZ` and `fr-DZ` — Phase 3+):** Server-side-rendered (SSR) **Laravel Blade + Tailwind CSS + Alpine.js** pages for SEO venue discovery across all **69 Algerian Wilayas**, availability viewing, and online booking requests.
-   - **Super-Admin Back-Office (`/admin`):** **Filament** administrative panel for organizations, licenses, subscriptions, moderation, providers, advertising, and audit logs.
+   - **Connect Sync & REST API (`/api/v1/*`):** Token-authenticated endpoints for multi-device synchronization, binary asset sync, Local-to-Connect staged migration, licensing, subscription device enforcement, and push wake-up pokes.
+   - **Public Marketplace (`/` in `ar-DZ`, `fr-DZ`, and `en` — Phase 3+):** Server-side-rendered (SSR) **Laravel Blade + Tailwind CSS + Alpine.js** pages for SEO venue discovery across all **69 Algerian Wilayas**, optional per-language venue/provider content with deterministic fallback, availability viewing, and online booking requests.
+   - **Super-Admin Back-Office (`/admin` in `ar`, `fr`, and `en`):** **Filament** administrative panel for organizations, licenses, configurable subscription plans & device limits, moderation, providers, advertising, and audit logs.
 3. **`tools/license-issuer` (Standalone Offline Operator CLI):** A small, operator-only Dart CLI using a `LicenseSigner` abstraction (supporting non-exportable hardware/OS-keystore keys or an offline encrypted vault) to generate and sign `.walimlic` perpetual license files outside the client repository.
 
 ```mermaid
@@ -28,22 +28,22 @@ flowchart TB
         IssuerCLI --> OperatorLedger
     end
 
-    subgraph Clients["Shared Flutter Codebase (apps/owner)"]
+    subgraph Clients["Shared Trilingual Flutter Codebase (apps/owner: ar-DZ / fr-DZ / en)"]
         WinApp["Windows Desktop Client\n(Local Single-Device OR Connect Synced)"]
         AndApp["Android Smartphone Client\n(Local Single-Device OR Connect Synced)"]
-        LocalDB[("Per-Venue Encrypted SQLite\n(venues/<venue_id>.db via sqlite3mc)\n+ sync_outbox + streaming .walimbak")]
+        LocalDB[("Per-Venue Encrypted SQLite\n(venues/<venue_id>.db via sqlite3mc chacha20)\n+ sync_outbox + streaming .walimbak")]
         WinApp --> LocalDB
         AndApp --> LocalDB
     end
 
     subgraph PublicUsers["Public Visitors (Mobile & Desktop Browsers)"]
-        WebVisitor["Families & Event Organizers\n(Arabic RTL / French LTR)"]
+        WebVisitor["Families & Event Organizers\n(Arabic RTL / French LTR / English LTR)"]
     end
 
     subgraph Backend["Single Laravel Modular Monolith (backend)"]
         SyncAPI["Connect REST & Sync API\n(/api/v1/* - Sanctum)"]
-        SSRWeb["Public Marketplace SSR\n(Blade + Tailwind + Alpine)"]
-        AdminPanel["Super-Admin Panel\n(Filament / Livewire)"]
+        SSRWeb["Public Marketplace SSR\n(Blade + Tailwind + Alpine: /ar, /fr, /en)"]
+        AdminPanel["Super-Admin Panel\n(Filament / Livewire: ar / fr / en)"]
         PG[("PostgreSQL 17\n(btree_gist, pg_trgm, DB Queue)")]
         ObjStore[("S3 / R2 Object Storage\n(Content-Addressed Assets & 360° Tours)")]
 
@@ -69,11 +69,11 @@ flowchart TB
 
 | Layer | Technology | Version Baseline & Pinning Policy | Rationale & Upstream Verification Evidence |
 | :--- | :--- | :--- | :--- |
-| **Owner Client UI & Logic** | Flutter + Dart | Current Stable SDK (`Flutter 3.44.8` installed locally; `Flutter 3.47.8` / `Dart 3.13.7` latest upstream stable as of Oct 2026). Pinned in `pubspec.lock` at Sprint 1.1 start. | Single codebase for Android (`API 24+`) and Windows (`x64`) with native RTL/LTR support. |
+| **Owner Client UI & Logic** | Flutter + Dart | Current Stable SDK (`Flutter 3.44.8` installed locally; `Flutter 3.47.8` / `Dart 3.13.7` latest upstream stable as of Oct 2026). Pinned in `pubspec.lock` at Sprint 1.1 start. | Single codebase for Android (`API 24+`) and Windows (`x64`) with native trilingual (`ar-DZ` RTL, `fr-DZ` LTR, `en` LTR) support. |
 | **Client State & Routing** | `flutter_riverpod`, `go_router` | Latest stable compatible with pinned Flutter SDK | Compile-safe dependency injection and reactive stream binding to Drift queries. |
-| **Client Encrypted Local DB** | `drift` + `sqlite3` with Native Assets Build Hook (`sqlite3mc`) | **`drift: ^2.35.0`** (latest `2.35.3`) + **`sqlite3: ^3.8.0`** configured in `pubspec.yaml` with `hooks.user_defines.sqlite3.source: sqlite3mc` (SQLite3MultipleCiphers, `AES-256` / `ChaCha20`, WAL mode). | Per upstream `sqlite3` 3.x (`UPGRADING_TO_V3.md`) and `drift` (`2.32.0+`) encryption docs, `sqlcipher_flutter_libs` (`0.7.0+eol`) is deprecated/EOL and replaced by the native `sqlite3` build hook bundling `SQLite3MultipleCiphers` on Android and Windows (`x64`). |
-| **Client PDF & Crypto** | `pdf`, `printing`, `cryptography` | Latest compatible (validated via Sprint 1.3 Arabic RTL shaping PoT) | 100% offline Arabic/French PDF generation, Ed25519 `.walimlic` verification, and streaming `AES-256-GCM` / `Argon2id` `.walimbak` backups. |
-| **Central Database** | PostgreSQL | PostgreSQL 17 (`btree_gist`, `pg_trgm`) | `btree_gist` enforces zero double-bookings at the engine level; `pg_trgm` handles bilingual search; native DB queues/locks avoid mandatory Redis. |
+| **Client Encrypted Local DB** | `drift` + `sqlite3` with Native Assets Build Hook (`sqlite3mc`) | **`drift: ^2.35.0`** (latest `2.35.3`) + **`sqlite3: ^3.8.0`** configured in `pubspec.yaml` with `hooks.user_defines.sqlite3.source: sqlite3mc` (`SQLite3MultipleCiphers`), explicitly selecting **`chacha20` (`ChaCha20-Poly1305` 256-bit AEAD, `legacy = 0`)** *before* `PRAGMA key` and verifying the active cipher in `debug`, `profile`, and `release` builds. | Per upstream `sqlite3` 3.x (`UPGRADING_TO_V3.md`) and `SQLite3MultipleCiphers` docs, `sqlcipher_flutter_libs` (`0.7.0+eol`) is deprecated/EOL, and `sqlite3mc`'s documented default cipher is `chacha20` (`ChaCha20-Poly1305`), **not** AES-256. Explicitly configuring and verifying `chacha20` before key application guarantees authenticated 256-bit encryption and high performance on budget Android ARM CPUs and Windows `x64` (validated by a Sprint 1.1 pre-feature PoT). |
+| **Client PDF & Crypto** | `pdf`, `printing`, `cryptography` | Latest compatible (validated via Sprint 1.3 Arabic RTL shaping PoT) | 100% offline trilingual (`ar`, `fr`, `en`) PDF generation, Ed25519 `.walimlic` verification, and 64 KiB streaming `AES-256-GCM` / `Argon2id` `.walimbak` backups. |
+| **Central Database** | PostgreSQL | PostgreSQL 17 (`btree_gist`, `pg_trgm`) | `btree_gist` enforces zero double-bookings at the engine level; `pg_trgm` handles trilingual search; native DB queues/locks avoid mandatory Redis. |
 | **Primary Keys** | Client/App-Generated UUIDv7 | RFC 9562 (`uuid` in Dart, `Ramsey\Uuid` in PHP) | Time-ordered UUIDs generated offline on devices without ID collisions or PostgreSQL 18 server-only dependency. |
 
 ### 2.2 Backend Compatibility Matrix (Sprint 2.1 Gate Verification)
@@ -107,8 +107,8 @@ walimapp/
 ├── apps/
 │   └── owner/                   # Shared Flutter app (Android + Windows; Local + Connect)
 │       └── lib/
-│           ├── core/            # Theme, l10n (ar-DZ/fr-DZ), MoneyDzd, UUIDv7, errors
-│           ├── database/        # Per-venue Drift encrypted DB (sqlite3mc), DAOs, migrations
+│           ├── core/            # Theme, l10n (ar-DZ/fr-DZ/en), MoneyDzd, UUIDv7, errors
+│           ├── database/        # Per-venue Drift encrypted DB (sqlite3mc chacha20), DAOs, migrations
 │           ├── platform/        # Thin Android vs Windows adapter implementations
 │           ├── features/
 │           │   ├── calendar/    # Month/week/day/agenda views & slot availability
@@ -116,50 +116,75 @@ walimapp/
 │           │   ├── booking_requests/ # Connect online request inbox & approval UI (Phase 3)
 │           │   ├── customers/   # Customer directory (optional NIN/CNI) & history
 │           │   ├── finance/     # Unconditionally append-only payments, expenses, reports
-│           │   ├── documents/   # Offline Arabic/French PDF contracts, receipts & hashes
+│           │   ├── documents/   # Offline trilingual (ar/fr/en) PDF contracts, receipts & hashes
 │           │   ├── sync/        # Monotonic outbox + asset uploader, delta pull, conflict UI
 │           │   ├── migration/   # Staged Local-to-Connect migration wizard
-│           │   ├── licensing/   # Ed25519 .walimlic verifier & Connect entitlement state
+│           │   ├── licensing/   # Ed25519 .walimlic verifier, Connect plan & device management
 │           │   └── settings/    # Venue, halls, slots, local_actors, streaming .walimbak
 │           └── shared/          # Adaptive shell (NavigationBar vs NavigationRail), widgets
 └── backend/                     # Laravel Modular Monolith
     ├── app/Modules/
     │   ├── Identity/            # Users, Organizations, VenueMemberships, DeviceRegistrations
-    │   ├── Reference/           # 69 Wilayas, Communes, Localization helpers
+    │   ├── Reference/           # 69 Wilayas, Communes, Trilingual Fallback helpers
     │   ├── Venue/               # Venues, Halls, HallSlots, ServiceCatalogs
     │   ├── Booking/             # Reservations, BookingRequests, SlotOverlapValidator
     │   ├── Finance/             # Immutable Payments ledger, Expenses, Checksums
     │   ├── Sync/                # Outbox ingestion, AssetSyncController, VenueSyncState, SyncChangeLog
     │   ├── Migration/           # Staged relational chunks, content-addressed asset verifier, promoter
-    │   ├── Licensing/           # Ed25519 license signer, ledger import, Subscriptions
-    │   ├── Marketplace/         # Public SSR controllers, SEO sitemaps, Providers, Ads
+    │   ├── Licensing/           # Ed25519 license signer, ledger import, SubscriptionPlans, Subscriptions
+    │   ├── Marketplace/         # Public SSR controllers (/ar, /fr, /en), SEO sitemaps, Providers, Ads
     │   └── Audit/               # Immutable AuditLog recorder
-    ├── app/Filament/            # Super-Admin panel resources & actions
-    └── resources/views/         # Bilingual SSR Blade templates (RTL/LTR)
+    ├── app/Filament/            # Trilingual Super-Admin panel resources & actions (ar / fr / en)
+    └── resources/views/         # Trilingual SSR Blade templates (RTL/LTR)
 ```
 
 ---
 
-## 4. Shared Android & Windows Client Architecture
+## 4. Shared Android & Windows Client Architecture & Trilingual Localization
 
 ### 4.1 What Is 100% Shared (~90% of `apps/owner`)
 - All domain entities, value objects (`MoneyDzd` integer whole DZD, `SlotWindow`, `WilayaCode`), and validation rules.
-- All Drift/SQLite tables, indexes, DAOs, schema migrations, and local query streams, organized with **per-venue database file isolation (`venues/<venue_id>.db`)** so individual Connect venues can be cryptographically erased and rebuilt cleanly upon role downgrade or membership revocation without violating append-only table triggers.
+- All Drift/SQLite tables, indexes, DAOs, schema migrations, and local query streams, organized with **per-venue database file isolation (`venues/<venue_id>.db`)** so individual Connect venues can be cryptographically erased and rebuilt cleanly upon role downgrade or membership/device revocation without violating append-only table triggers.
 - All application use cases (reservation creation, slot overlap check, payment recording, expense tracking, monotonic outbox queuing, binary asset sync, delta sync, staged migration, and license verification).
-- All localization files (`app_ar.arb`, `app_fr.arb`) and PDF contract/receipt templates.
+- All trilingual localization files (`app_ar.arb`, `app_fr.arb`, `app_en.arb`) and PDF contract/receipt templates.
 
-### 4.2 Adaptive UI Layout Strategy
+### 4.2 Trilingual Architecture (`ar-DZ` RTL, `fr-DZ` LTR, `en` LTR), Language Preferences & Content Fallback
+1. **Supported Locales & Directionality Across All Surfaces:**
+   - **Arabic (`ar-DZ`):** Strict Right-to-Left (`TextDirection.rtl` in Flutter using `EdgeInsetsDirectional` / `AlignmentDirectional`; `dir="rtl"` in HTML/CSS using Tailwind logical properties `ms-*`, `me-*`, `ps-*`, `pe-*`, `text-start`, `text-end`).
+   - **French (`fr-DZ`) & English (`en`):** Strict Left-to-Right (`TextDirection.ltr`; `dir="ltr"`).
+   - **Western Arabic Numerals (`0-9`) Everywhere:** All numbers, dates (`'YYYY-MM-DDTHH:mm:ss'`), phone numbers, guest capacities, and integer whole-Dinar (`DZD` / `د.ج` / `DA`) amounts use Western digits (`0-9`) across Arabic, French, and English.
+2. **Language Preference Hierarchy:**
+   - **Flutter Owner & Staff App (`apps/owner`):**
+     - **UI Language:** Stored per local actor (`local_actors.preferred_locale` in Local mode) and per authenticated user (`users.preferred_locale` in `'ar' | 'fr' | 'en'` in Connect mode, cached locally for login screen rendering). Switching UI language updates the app immediately without restart or data loss.
+     - **Document Output Language:** Each venue defines a default document language (`venues.default_locale` in `'ar' | 'fr' | 'en'`, default `'fr'`). When generating any PDF contract or payment receipt, the staff member can accept `venues.default_locale` or explicitly pick `'ar'`, `'fr'`, or `'en'` (or bilingual header mode per `DEC-05`) for that customer document.
+   - **Public Marketplace (`backend` Blade SSR):**
+     - **URL-Prefixed Locale:** All public routes carry an explicit locale prefix (`/ar/...`, `/fr/...`, `/en/...`).
+     - **Negotiation & Persistence:** Visiting `/` redirects (`302`) to `/ar`, `/fr`, or `/en` based on the visitor's `walimapp_locale` cookie (if previously chosen via the header language switcher), then the browser `Accept-Language` header, and defaults to `/fr` when neither matches.
+   - **Super-Admin (`backend` Filament):**
+     - Supports `'ar'` (RTL), `'fr'` (LTR), and `'en'` (LTR) via `users.preferred_locale` and an in-panel language switcher.
+3. **Optional Per-Language Venue/Provider Content & Deterministic Fallback Chain:**
+   - **System & Reference Data:** All UI chrome, navigation labels, status badges, amenity names, service categories, and the 69-Wilaya / 1,541-commune reference tables are 100% translated into Arabic (`_ar`), French (`_fr`), and English (`_en`).
+   - **User-Authored Marketplace Content (`venues`, `halls`, `hall_slots`, `service_providers`):**
+     - Supports optional per-language text columns (`name_ar`, `name_fr`, `name_en`, `description_ar`, `description_fr`, `description_en`).
+     - **Single-Language Minimum:** Venue owners and providers are only required to populate **at least one language** (`ar`, `fr`, or `en`) to save or publish a listing; the remaining languages are optional.
+     - **Deterministic Fallback Order:** When displaying a user-authored text field in requested locale `L` and the value for `L` is `NULL` or blank, the `LocalizedTextResolver` resolves the first non-empty value using:
+       - Requested `en` -> **`en` -> `fr` -> `ar`**
+       - Requested `fr` -> **`fr` -> `ar` -> `en`**
+       - Requested `ar` -> **`ar` -> `fr` -> `en`**
+     - **Bidirectional Container Isolation (`<bdi>` / `Directionality`):** Whenever the resolved fallback text belongs to a different directionality than the active page shell (e.g., an Arabic venue description displayed on an `/en/` or `/fr/` page, or a French description displayed on an `/ar/` page), the text block is rendered inside `<bdi dir="rtl|ltr" lang="...">` (web) or `Directionality(textDirection: ...)` (Flutter) so punctuation and layout never corrupt the surrounding page direction.
+
+### 4.3 Adaptive UI Layout Strategy
 A single `AdaptiveShell` widget inspects `MediaQuery.sizeOf(context).width`:
 - **Compact (`< 600dp` — Android Smartphones):**
   - Bottom `NavigationBar` (Calendar, Reservations, Requests/Customers, Finance, More).
   - Single-pane Agenda/Day/Month calendar with swipeable date navigation and bottom-sheet booking/payment forms.
   - Quick one-tap phone call (`tel:`) and WhatsApp (`https://wa.me/`) actions on customer and booking-request cards.
 - **Medium / Expanded (`>= 600dp` / `>= 1024px` — Windows Desktop & Tablets):**
-  - Left `NavigationRail` (collapsible to extended sidebar at `>= 1200px`).
-  - Master-detail split views: multi-hall calendar grid on the left, selected reservation inspector and payment ledger drawer on the right.
+  - Leading `NavigationRail` (automatically positioned on the right in `ar-DZ` RTL and on the left in `fr-DZ` / `en` LTR; collapsible to extended sidebar at `>= 1200px`).
+  - Master-detail split views: multi-hall calendar grid on the start pane, selected reservation inspector and payment ledger drawer on the end pane.
   - Full keyboard navigation, shortcut bindings (`Ctrl+N` new reservation, `Ctrl+F` search, `Ctrl+P` print), and hover tooltips.
 
-### 4.3 Platform-Specific Adapters (`lib/platform/`)
+### 4.4 Platform-Specific Adapters (`lib/platform/`)
 
 | Adapter Interface | Windows Implementation | Android Implementation |
 | :--- | :--- | :--- |
@@ -173,19 +198,20 @@ A single `AdaptiveShell` widget inspects `MediaQuery.sizeOf(context).width`:
 
 ## 5. Core Domain Model & Database Integrity
 
-### 5.1 Algeria 69-Wilaya Reference Model
-- **`wilayas`**: `code` (`VARCHAR(2)` primary/unique key `'01'`..`'69'`), `name_ar`, `name_fr`, `slug_ar`, `slug_fr`, `is_active`.
-- **`communes`**: `id`, `wilaya_code` (FK -> `wilayas.code`), `code_ons`, `name_ar`, `name_fr`, `slug_ar`, `slug_fr`.
-- Seeded in Sprint 1.1 after acquiring and verifying an authoritative, versioned JSON dataset (`data/algeria_69_wilayas_communes_v1.json`, recording official JORADP/ONS source version and SHA-256 checksum) covering all **69 official Algerian Wilayas** and **1,541 communes**. Automated tests assert the exact 69-Wilaya and 1,541-commune counts, parent-child linkage, and bilingual names. No constraint restricts Wilaya codes to `<= 58`.
+### 5.1 Algeria 69-Wilaya Trilingual Reference Model
+- **`wilayas`**: `code` (`VARCHAR(2)` primary/unique key `'01'`..`'69'`), `name_ar`, `name_fr`, `name_en`, `slug_ar`, `slug_fr`, `slug_en`, `is_active`.
+- **`communes`**: `id`, `wilaya_code` (FK -> `wilayas.code`), `code_ons`, `name_ar`, `name_fr`, `name_en`, `slug_ar`, `slug_fr`, `slug_en`.
+- Seeded in Sprint 1.1 after acquiring and verifying an authoritative, versioned JSON dataset (`data/algeria_69_wilayas_communes_v1.json`, recording official JORADP/ONS source version and SHA-256 checksum) covering all **69 official Algerian Wilayas** and **1,541 communes**. (For Algerian proper place names without a distinct English exonym, `name_en` / `slug_en` default to the official Latin/French orthography.) Automated tests assert the exact 69-Wilaya and 1,541-commune counts, parent-child linkage, and trilingual names. No constraint restricts Wilaya codes to `<= 58`.
 
 ### 5.2 Tenant, Venue, Hall, Configurable Slot & Local Actor Hierarchy
 - **Canonical Money Unit (`*_dzd BIGINT`):** Every monetary column across all tables in SQLite and PostgreSQL is stored as an integer representing **whole Algerian Dinars (`BIGINT` `DZD`)**. Centimes (`amount_minor`) and floating-point types are never used.
-- **`organizations`**: Top-level billing and ownership boundary (`id` UUIDv7, `name`, `plan_tier`, `subscription_status`, `subscription_expires_at`, `grace_ends_at`).
-- **`venues`**: Physical wedding venue belonging to an `organization_id` (`id` UUIDv7, `organization_id`, `wilaya_code`, `commune_id`, `name_ar`, `name_fr`, `slug`, `phone`, `whatsapp`, `logo_asset_sha256`, `is_public_listed`, `migrated_from_local_at`).
+- **`organizations`**: Top-level billing and ownership boundary (`id` UUIDv7, `name`, `active_subscription_id`).
+- **`venues`**: Physical wedding venue belonging to an `organization_id` (`id` UUIDv7, `organization_id`, `wilaya_code`, `commune_id`, `name_ar`, `name_fr`, `name_en`, `description_ar`, `description_fr`, `description_en`, `default_locale` `'ar'|'fr'|'en'`, `slug`, `phone`, `whatsapp`, `logo_asset_sha256`, `is_public_listed`, `migrated_from_local_at`). At least one of `name_ar`, `name_fr`, or `name_en` must be non-empty (`CHECK (COALESCE( NULLIF(TRIM(name_ar), ''), NULLIF(TRIM(name_fr), ''), NULLIF(TRIM(name_en), '') ) IS NOT NULL)`).
 - **`venue_memberships`** (Connect): Maps `user_id` to `organization_id` and `venue_id` (nullable = all venues in organization) with `role` (`owner`, `manager`, `receptionist`, `accountant`, `viewer`), `can_view_finance` (`BOOLEAN`), and `is_active`.
-- **`local_actors`** (Local & Migrated Audit Identity — `P1-6`): Stores local device actor profiles (`id` UUIDv7, `venue_id`, `display_name` `TEXT NOT NULL`, `role_label` `'owner'` | `'staff'`, `mapped_connect_user_id` `UUID NULL`, `is_active` `BOOLEAN`). Seeded automatically on venue setup with a default `Local Owner` actor (`display_name = owner_name`). If the owner uses Local PIN/profiles (`DEC-04`), named local staff actors can be added so every payment, adjustment, or booking in single-device Local mode has an immutable actor identity that survives Local-to-Connect migration without fabricating fake server `user_id` values.
-- **`halls`**: Bookable space inside a venue (`id` UUIDv7, `venue_id`, `name_ar`, `name_fr`, `capacity_men`, `capacity_women`, `capacity_total`, `base_price_dzd` `BIGINT`). The schema imposes no limit on the number of halls per venue (`P0-3`, `P2-3`).
-- **`hall_slots`**: Owner-configurable time windows per hall (`id` UUIDv7, `hall_id`, `code`, `label_ar`, `label_fr`, `start_time` `TIME`, `end_time` `TIME`, `spans_next_day` `BOOLEAN`, `default_price_dzd` `BIGINT`).
+- **`device_registrations`** (Connect): Tracks physical client installations registered to an organization (`id` UUIDv7, `organization_id`, `device_installation_uuid`, `platform` `'android'|'windows'`, `device_label`, `status` `'active'|'revoked'|'replaced'`, `last_authenticated_user_id`, `last_seen_at`, `revoked_at`, `revoked_by_user_id`, `replaced_by_device_id`).
+- **`local_actors`** (Local & Migrated Audit Identity — `P1-6`): Stores local device actor profiles (`id` UUIDv7, `venue_id`, `display_name` `TEXT NOT NULL`, `role_label` `'owner'` | `'staff'`, `preferred_locale` `'ar'|'fr'|'en'`, `mapped_connect_user_id` `UUID NULL`, `is_active` `BOOLEAN`). Seeded automatically on venue setup with a default `Local Owner` actor (`display_name = owner_name`). If the owner uses Local PIN/profiles (`DEC-04`), named local staff actors can be added so every payment, adjustment, or booking in single-device Local mode has an immutable actor identity that survives Local-to-Connect migration without fabricating fake server `user_id` values.
+- **`halls`**: Bookable space inside a venue (`id` UUIDv7, `venue_id`, `name_ar`, `name_fr`, `name_en`, `capacity_men`, `capacity_women`, `capacity_total`, `base_price_dzd` `BIGINT`). The schema imposes no limit on the number of halls per venue (`P0-3`, `P2-3`).
+- **`hall_slots`**: Owner-configurable time windows per hall (`id` UUIDv7, `hall_id`, `code`, `label_ar`, `label_fr`, `label_en`, `start_time` `TIME`, `end_time` `TIME`, `spans_next_day` `BOOLEAN`, `default_price_dzd` `BIGINT`).
   - *Overnight slot handling:* When `spans_next_day = false`, a booking on date `D` produces `starts_at_local = D + start_time` and `ends_at_local = D + end_time`. When `spans_next_day = true` (e.g., `19:00` to `02:00`), `ends_at_local = (D + 1 day) + end_time`.
 
 ### 5.3 Separation of `booking_requests` and `reservations`
@@ -215,7 +241,7 @@ stateDiagram-v2
 ```
 
 1. **`booking_requests` (PostgreSQL + synced read/action projection in Connect):**
-   - Stores public marketplace inquiries: `id` (UUIDv7), `organization_id`, `venue_id`, `hall_id`, `slot_id`, `event_date`, `starts_at_local`, `ends_at_local`, `requester_name`, `requester_phone`, `requester_whatsapp`, `guest_count`, `event_type`, `message`, `status` (`pending`, `approved`, `rejected`, `expired`, `cancelled_by_requester`), `resulting_reservation_id` (nullable FK), `privacy_consent_at`.
+   - Stores public marketplace inquiries: `id` (UUIDv7), `organization_id`, `venue_id`, `hall_id`, `slot_id`, `event_date`, `starts_at_local`, `ends_at_local`, `requester_name`, `requester_phone`, `requester_whatsapp`, `requester_locale` (`'ar'|'fr'|'en'`), `guest_count`, `event_type`, `message`, `status` (`pending`, `approved`, `rejected`, `expired`, `cancelled_by_requester`), `resulting_reservation_id` (nullable FK), `privacy_consent_at`.
    - **Rule:** Rows in `booking_requests` **never** block a hall slot until approved.
 2. **`reservations` (SQLite & PostgreSQL):**
    - Stores actual owner-managed bookings: `id` (UUIDv7), `organization_id`, `venue_id`, `hall_id`, `slot_id`, `customer_id`, `booking_reference`, `event_date`, `starts_at_local` (`TIMESTAMP` in PostgreSQL; canonical zero-padded ISO-8601 string `'YYYY-MM-DDTHH:mm:ss'` in SQLite for locale-independent `<` / `>` comparisons — `G-P3-2`), `ends_at_local`, `status` (`confirmed`, `tentative`, `cancelled`, `needs_review`), `base_price_dzd` (`BIGINT`), `services_total_dzd` (`BIGINT`), `discount_dzd` (`BIGINT`), `total_price_dzd` (`BIGINT`), `is_financial_masked` (`BOOLEAN DEFAULT FALSE`, local client column used when a non-financial role pulls masked prices), `cancellation_reason`, `cancelled_at`, `version` (`INT`), `recorded_by_actor_name` (`TEXT NOT NULL`), `recorded_by_local_actor_id` (`UUID NULL`), `created_by_user_id` (`UUID NULL`), `created_by_device_id`, `deleted_at`.
@@ -251,7 +277,7 @@ stateDiagram-v2
   ```
 - **How Connect Role Downgrade & Revocation Purge Cached Payments Without Weakening the Trigger (`P1-2`):**
   - Because `DELETE FROM payments` is unconditionally forbidden inside every database, `apps/owner` isolates each venue into its own encrypted SQLite file (`venues/<venue_id>.db`) encrypted with its own 256-bit key (`key_venue_<venue_id>` in `SecureCredentialStore`).
-  - When a Connect employee's membership is revoked or their role is downgraded from financial (`manager`) to non-financial (`viewer`), the client **never issues `DELETE FROM payments`**. Instead, it closes `venues/<venue_id>.db`, deletes `key_venue_<venue_id>` from `SecureCredentialStore` (**cryptographic erasure**), unlinks the `venues/<venue_id>.db` file from disk, and (on role downgrade) initializes a fresh encrypted `venues/<venue_id>.db` re-hydrated from the role-filtered `/api/v1/sync/pull` stream (preserving any unpushed non-financial `sync_outbox` operations).
+  - When a Connect employee's membership or device is revoked or their role is downgraded from financial (`manager`) to non-financial (`viewer`), the client **never issues `DELETE FROM payments`**. Instead, it closes `venues/<venue_id>.db`, deletes `key_venue_<venue_id>` from `SecureCredentialStore` (**cryptographic erasure**), unlinks the `venues/<venue_id>.db` file from disk, and (on role downgrade) initializes a fresh encrypted `venues/<venue_id>.db` re-hydrated from the role-filtered `/api/v1/sync/pull` stream (preserving any unpushed non-financial `sync_outbox` operations).
 - **Reservation Balance Calculation:** `amount_paid_dzd = COALESCE(SUM(payments.amount_dzd), 0)` for the reservation; `balance_due_dzd = total_price_dzd - amount_paid_dzd`.
 
 ---
@@ -270,7 +296,7 @@ stateDiagram-v2
    - **Connect Binary File Synchronization (`G-P1-1`):** When an outbox entry creates/updates a `generated_documents` row (PDF contract/receipt) or a `venues` logo (`required_asset_sha256 IS NOT NULL`), the sync worker **first** uploads the binary file to `PUT /api/v1/sync/assets/{sha256_checksum}` (where the server verifies `byte_size` and `sha256_checksum` and stores the immutable object at `tenants/{org_id}/venues/{venue_id}/assets/{sha256_checksum}`). Only after the binary upload returns `200 OK` does the client push the relational `sync_outbox` operation in `/api/v1/sync/push`. Other Connect devices pulling the `generated_documents` metadata row fetch the binary on demand via `GET /api/v1/sync/assets/{sha256_checksum}` and verify `sha256_checksum` locally.
 3. **Auth-First Idempotency, Payload-Hash Binding & Commit-Serialized Sequence Allocation (`P1-4`, `G-P1-2`):**
    - For each operation in the batch, the server executes in strict order:
-     1. **Step 1 — Current Authentication & Venue Authorization Check FIRST (`P1-4`):** Verify that the caller's Sanctum device token is active and that the caller's current `venue_memberships` row for `op.venue_id` is active and authorized for `(op.entity_type, op.op_type)`. If revoked or unauthorized, return `403`/`401` immediately **before** checking `sync_processed_operations` (never leaking a previously stored `result_json` to a revoked or downgraded user).
+     1. **Step 1 — Current Authentication, Active Device & Venue Authorization Check FIRST (`P1-4`):** Verify that the caller's Sanctum token and `device_registrations` row are `active` (`401 DEVICE_REVOKED` otherwise) and that the caller's current `venue_memberships` row for `op.venue_id` is active and authorized for `(op.entity_type, op.op_type)`. If revoked or unauthorized, return `403`/`401` immediately **before** checking `sync_processed_operations` (never leaking a previously stored `result_json` to a revoked or downgraded user).
      2. **Step 2 — Safe Partial Update Stripping for Non-Financial Roles (`G-P1-2`):** If `op.entity_type == 'reservation'` and the caller's `venue_memberships.can_view_finance == false`, the server **actively strips/ignores financial columns (`base_price_dzd`, `services_total_dzd`, `discount_dzd`, `total_price_dzd`)** from `op.payload_json` so that a receptionist editing `guest_count` or `notes` on a masked reservation (`is_financial_masked = true`) succeeds as a safe partial update without overwriting server prices or being rejected. (Attempts by a non-financial role to insert/mutate `payments` or `expenses` are rejected in Step 1 with `403 FORBIDDEN_FINANCIAL_OPERATION`.)
      3. **Step 3 — Idempotency Lookup & `payload_sha256` Verification (Inside Savepoint/Transaction — `P1-4`):** Compute `canonical_sha256 = SHA256(canonical_json(op.payload_json))` and query `sync_processed_operations WHERE operation_id = :op_id AND organization_id = :org_id FOR UPDATE`:
         - If found and `stored.payload_sha256 == canonical_sha256` and `stored.venue_id == op.venue_id`: return a role-filtered view of `stored.result_json` (`status = 'already_processed'`).
@@ -319,7 +345,7 @@ When a WalimApp Local owner upgrades to WalimApp Connect, migration executes in 
    - **M2a (Session & Complete Asset Manifest — `P1-7`):** Client initiates `POST /api/v1/migrations/sessions` with:
      - Exact row counts for all **12 relational entity types** (`venue`, `local_actors`, `halls`, `hall_slots`, `service_catalogs`, `contract_templates`, `customers`, `reservations`, `reservation_status_history`, `payments`, `expenses`, `generated_documents`).
      - Aggregate and per-reservation financial checksums (`sum_total_price_dzd`, `sum_payments_amount_dzd`, `sum_expenses_amount_dzd`).
-     - A complete **`migration_assets_manifest`** enumerating every binary asset that Local can store in Phase 1 (`generated_document_pdf` for every row in `generated_documents` and `venue_logo` if set on `venue`; arbitrary photo galleries are Phase 2/3 Connect features): `asset_id` (UUIDv7), `asset_kind` (`generated_document_pdf` | `venue_logo`), `owner_entity_type`, `owner_entity_id`, `mime_type`, `byte_size`, `sha256_checksum`, and `local_file_status` (`present_verified` | `missing_on_local_disk`).
+     - A complete **`migration_assets_manifest`** enumerating every binary asset that Local can store in Phase 1 (`generated_document_pdf` for every row in `generated_documents` and `venue_logo` if set on `venue`): `asset_id` (UUIDv7), `asset_kind` (`generated_document_pdf` | `venue_logo`), `owner_entity_type`, `owner_entity_id`, `mime_type`, `byte_size`, `sha256_checksum`, and `local_file_status` (`present_verified` | `missing_on_local_disk`).
    - **M2b (Relational Chunks):** Client uploads the 12 relational entity types in strict dependency order (`venue -> local_actors -> halls -> hall_slots -> service_catalogs -> contract_templates -> customers -> reservations -> reservation_status_history -> payments -> expenses -> generated_documents`) in chunks of 100 records to `migration_staging_records`. Chunks are idempotent by `(migration_session_id, chunk_index)` and resumable.
    - **M2c (Immutable Content-Addressed Binary Upload — `P1-5`, `P1-7`):**
      - For every asset in `migration_assets_manifest` with `local_file_status = 'present_verified'`, the client uploads the file to `PUT /api/v1/migrations/sessions/{id}/assets/{asset_id}`.
@@ -338,7 +364,7 @@ When a WalimApp Local owner upgrades to WalimApp Connect, migration executes in 
 
 ---
 
-## 8. Perpetual Licensing & Connect Subscription State Machine
+## 8. Perpetual Licensing & Connect Subscription / Device Management Architecture
 
 ### 8.1 WalimApp Local Perpetual License (`.walimlic`) & `LicenseSigner` Interface (`P0-3`, `P1-9`, `P2-3`)
 - **License Payload & Ed25519 Signature:** A `.walimlic` file is a canonical JSON payload signed with WalimApp's **Ed25519** key (only the 32-byte public key is embedded in `apps/owner`). Per `P0-3` and `P2-3`, a Local license covers `1` physical venue with **unlimited halls by default (`"max_halls": null`)**; `max_halls` is an optional nullable entitlement enforced in domain policy only if a commercial tier sets a non-null integer:
@@ -363,16 +389,41 @@ When a WalimApp Local owner upgrades to WalimApp Connect, migration executes in 
   - Every issued or transferred `.walimlic` is appended to `issued-licenses.jsonl` (with `license_id`, `supersedes_license_id`, `installation_fingerprint_hash`, and signature) for import/sync with Filament Super-Admin.
 - **Maintenance Expiry Rule:** Each app binary embeds its `APP_BUILD_DATE`. As long as `APP_BUILD_DATE <= license.updates_until` (checked *before* running any new version's SQLite schema migrations), the build activates and runs **forever**.
 
-### 8.2 WalimApp Connect Subscription Expiry & Renewal Reconciliation
-- Connect subscription states: `active` -> `past_due` (grace period, default 14 days `[OPEN -> DEC-09]`) -> `expired_local_fallback`.
-- **Behavior in `expired_local_fallback`:** Cloud sync push/pull and public marketplace `booking_requests` acceptance are paused, while local encrypted SQLite data on the owner's device(s) remains **fully readable and writable offline**, including PDF printing and `.walimbak` backups.
-- **Reconciliation Upon Renewal:** Local edits made during `expired_local_fallback` queue in `sync_outbox` (`outbox_seq`). Upon renewal (`active`), each device pushes its queued `sync_outbox` batches through `/api/v1/sync/push` and pulls missed deltas via `/api/v1/sync/pull` (transitioning any overlapping offline bookings to `status = 'needs_review'`).
+### 8.2 WalimApp Connect Subscription Plans, Active Device Tiers, Device Replacement & Expiry Lifecycle
+1. **Super-Admin Configurable Plans (`subscription_plans`):**
+   - `subscription_plans` (`id` UUIDv7, `code`, `name_ar`, `name_fr`, `name_en`, `price_dzd BIGINT NOT NULL`, `billing_interval` `'monthly'|'quarterly'|'semi_annual'|'annual'|'custom_days'`, `billing_interval_count INT`, `max_active_devices INT NOT NULL`, `max_venues INT NULL`, `max_users INT NULL`, `is_active BOOLEAN`).
+   - Seeded with two standard commercial tiers (whose names, whole-DZD prices, billing intervals, device limits, and venue/user limits are fully configurable by the Super-Admin in Filament):
+     - **Connect Basic:** **`max_active_devices = 1`** (`1` active registered device).
+     - **Connect Higher-Capacity (Team/Pro):** **`max_active_devices = 5`** (up to `5` active registered devices at a higher price).
+2. **Mandatory Individual Accounts & Separation of Device Limit from User Seats (`max_active_devices != max_users`):**
+   - Individual user accounts (`users`) and venue-scoped role permissions (`venue_memberships`: `owner`, `manager`, `receptionist`, `accountant`, `viewer`) are **always mandatory**, regardless of plan tier.
+   - `max_active_devices` restricts the number of concurrently active physical installations (`SELECT count(*) FROM device_registrations WHERE organization_id = :org_id AND status = 'active'`). It **does not** restrict how many staff accounts (`venue_memberships`) exist or sign in sequentially on an active registered device ( unless an optional `max_users` limit is explicitly configured on a custom plan).
+3. **Device Registration, Replacement & Revocation Workflow (`device_registrations`):**
+   - On login (`POST /api/v1/auth/login`), the client sends its `device_installation_uuid` (`DeviceIdentityProvider`), platform, and user-friendly label.
+   - Inside a database transaction (`SELECT ... FROM subscriptions WHERE organization_id = :org_id FOR UPDATE`):
+     - If `device_installation_uuid` is already `status = 'active'` for this organization, login succeeds and updates `last_authenticated_user_id` and `last_seen_at`.
+     - If `device_installation_uuid` is new and `active_device_count < effective_max_active_devices` (`COALESCE(override_max_active_devices, snapshot_max_active_devices)`), the server inserts an `active` `device_registrations` row and issues the Sanctum token.
+     - If `active_device_count >= effective_max_active_devices`, the server returns `409 DEVICE_LIMIT_REACHED` with the list of currently active devices (`device_id`, `device_label`, `platform`, `last_seen_at`, `last_user_name`).
+   - **Device Replacement / Revocation:**
+     - An **Owner** (via `POST /api/v1/devices/{old_device_id}/replace` during the login prompt or from Settings -> Devices) or a **Super-Admin** (in Filament) can revoke or replace an existing device.
+     - The server atomically marks the old device `status = 'revoked'` (`revoked_at = NOW()`, `replaced_by_device_id = :new_id`), deletes all Sanctum tokens bound to the old device, records an entry in `audit_logs`, and registers the new device as `active`.
+     - When the replaced/revoked device next touches the network, `/api/v1/sync/*` returns `401 DEVICE_REVOKED`, triggering immediate local token wipe and per-venue DB cryptographic erasure (`venues/<venue_id>.db`).
+4. **Plan Changes & Grandfathered Price Snapshot Protection (`subscriptions`):**
+   - Each row in `subscriptions` stores **immutable term snapshot columns**: `agreed_price_dzd BIGINT NOT NULL`, `agreed_billing_interval`, `snapshot_max_active_devices INT NOT NULL`, `snapshot_max_venues INT NULL`, `snapshot_max_users INT NULL` (plus optional Super-Admin per-tenant overrides `override_max_active_devices`, `override_max_venues`, `override_max_users`).
+   - **No Silent Price Mutation:** Updating `subscription_plans.price_dzd` or limits in Filament modifies the template for *new* subscriptions or future negotiated renewals only; it **never** modifies `agreed_price_dzd` or reduces `snapshot_max_active_devices` on existing active subscriptions.
+   - **Mid-Term Upgrades & Downgrades:**
+     - **Upgrade (`1` -> `5` active devices):** Super-Admin (or owner upgrade confirmation) records the new `plan_id`, explicitly agreed `agreed_price_dzd`, and updates `snapshot_max_active_devices = 5` immediately (logged in `audit_logs`).
+     - **Downgrade (`5` -> `1` active device):** Either scheduled for the end of the current paid billing cycle (`pending_plan_id`) so the current paid term is honored in full, or—if applied immediately by Super-Admin/Owner—requires selecting which `1` device remains `active` while marking the remaining devices `revoked`.
+5. **Subscription Expiry & Renewal Reconciliation:**
+   - Connect subscription states: `active` -> `past_due` (grace period, default 14 days `[OPEN -> DEC-09]`) -> `expired_local_fallback`.
+   - **Behavior in `expired_local_fallback`:** Cloud sync push/pull and public marketplace `booking_requests` acceptance are paused, while local encrypted SQLite data on the owner's device(s) remains **fully readable and writable offline**, including PDF printing and `.walimbak` backups.
+   - **Reconciliation Upon Renewal:** Local edits made during `expired_local_fallback` queue in `sync_outbox` (`outbox_seq`). Upon renewal (`active`), each device pushes its queued `sync_outbox` batches through `/api/v1/sync/push` and pulls missed deltas via `/api/v1/sync/pull` (transitioning any overlapping offline bookings to `status = 'needs_review'`).
 
 ---
 
 ## 9. Public Marketplace, Advertising & 360° Tours Readiness (Phases 3–4)
 
-- **SSR & SEO Architecture:** Public routes (`/ar/salles/{wilaya}/{slug}`, `/fr/salles/{wilaya}/{slug}`) are rendered by Laravel Blade with localized metadata, `hreflang`, and `EventVenue` JSON-LD.
+- **Trilingual SSR & SEO Architecture:** Public routes (`/ar/salles/{wilaya}/{slug}`, `/fr/salles/{wilaya}/{slug}`, `/en/venues/{wilaya}/{slug}`) are rendered by Laravel Blade with localized metadata, `hreflang="ar-DZ"`, `hreflang="fr-DZ"`, `hreflang="en"`, `hreflang="x-default"`, and `EventVenue` JSON-LD. Optional per-language venue/provider descriptions resolve via the deterministic fallback chain (`en -> fr -> ar`, `fr -> ar -> en`, `ar -> fr -> en`) inside `<bdi dir="rtl|ltr">` containers.
 - **Availability Cache:** Public availability calendars query a read-optimized projection of `(hall_id, slot_id, event_date, is_unavailable)` updated synchronously whenever a reservation status changes in PostgreSQL. Zero customer PII is ever exposed to the marketplace view layer.
 - **Advertising Engine:** `ad_campaigns` and `ad_placements` tables support Wilaya-targeted and category-targeted featured slots (Phase 3 admin-managed; Phase 4 self-serve).
 - **Phase 4 360° Virtual Tours Readiness:** The `venue_media` schema reserves `media_type = 'panorama_360'` pointing to static equirectangular assets on S3/R2, rendered on the public page only when clicked via lazy-loaded `Pannellum` JS so initial page LCP stays `< 2.5s`.
@@ -384,33 +435,58 @@ When a WalimApp Local owner upgrades to WalimApp Connect, migration executes in 
 ### 10.1 Authentication, Clock-Rollback-Resistant Revocation Lease & Push Privacy (`P1-2`, `P1-3`, `G-P2-1`)
 1. **Transport & Per-Device Tokens:** TLS 1.2/1.3 everywhere; Laravel Sanctum personal access tokens scoped per `device_id`.
 2. **Realistic Membership & Device Revocation Guarantees:**
-   - **Immediate Online Block:** Revoking a user's `venue_memberships` row or `device_registrations` token in Connect immediately blocks all `/api/v1/sync/*` and REST endpoints with `403 MEMBERSHIP_REVOKED` / `401 DEVICE_REVOKED`.
+   - **Immediate Online Block:** Revoking a user's `venue_memberships` row or `device_registrations` row in Connect immediately blocks all `/api/v1/sync/*` and REST endpoints with `403 MEMBERSHIP_REVOKED` / `401 DEVICE_REVOKED`.
    - **Automatic Per-Venue Crypto-Erasure on Next Reconnection (`P1-2`):** When a revoked device next contacts the server and receives `403 MEMBERSHIP_REVOKED` or `401 DEVICE_REVOKED`, the client immediately closes `venues/<venue_id>.db`, deletes `key_venue_<venue_id>` from `SecureCredentialStore`, and unlinks `venues/<venue_id>.db` from disk.
    - **Clock-Rollback-Resistant 72-Hour `OfflineAccessLease` (`G-P2-1`):** Non-owner staff devices (`manager`, `receptionist`, `accountant`, `viewer`) hold a server-signed **Offline Access Lease** (`issued_at_server_utc`, `expires_at_server_utc = +72h`) refreshed on every successful sync. To prevent a revoked employee in airplane mode from bypassing the 72h expiry by rolling back the device's OS wall clock, the client enforces two monotonic checks:
      1. **Monotonic Boot Clock Elapsed Check:** Records the OS monotonic uptime (`SystemClock.elapsedRealtime()` on Android; `GetTickCount64()` on Windows) when the lease is saved; if `current_elapsed_ms - lease_saved_elapsed_ms > 72 hours` within the same boot session, the lease expires regardless of `DateTime.now()`.
      2. **Persisted Wall-Clock High-Water Mark (`highest_observed_utc`):** Updates `highest_observed_utc` in `SecureCredentialStore` on every app launch, foreground resume, and DB write. If `DateTime.now().toUtc() < highest_observed_utc - 5 minutes` (indicating manual backward clock tampering) OR `max(DateTime.now().toUtc(), highest_observed_utc) > expires_at_server_utc`, the client immediately locks offline access to the Connect venue until online re-authentication succeeds.
 3. **Zero PII in Push Notifications (`P2-4`):** Firebase Cloud Messaging (FCM) notifications (gated on `DEC-10`/`DEC-11`) contain only opaque sync wake-up payloads (`{"type": "SYNC_POKE", "venue_id": "<uuid>", "seq": 142}`). Customer names, phone numbers, and financial amounts are never transmitted through push channels.
 
-### 10.2 Fail-Closed Local DB Encryption (`sqlite3mc`) & Law 18-07 / 25-11 Safeguards (`P1-1`, `P1-8`)
-1. **Local Database Encryption at Rest & Fail-Closed Runtime Check (`P1-1`, `P1-8`):**
-   - Each venue's SQLite database (`venues/<venue_id>.db`, `-wal`, `-shm`) is encrypted at rest using **SQLite3MultipleCiphers (`sqlite3mc`, AES-256)** bundled via the `package:sqlite3` (`^3.8.0`) Native Assets build hook (`hooks.user_defines.sqlite3.source: sqlite3mc`) with `drift` (`^2.35.0`).
-   - **Fail-Closed Startup Enforcement:** In `NativeDatabase(..., setup: (rawDb) { ... })`, the app executes an unconditional runtime check (active in **release, profile, and debug** builds—never `assert`-only) *before* applying `PRAGMA key` or creating any schema:
+### 10.2 Explicit `sqlite3mc` Cipher Selection (`chacha20`), Pre-Key Configuration, Fail-Closed Verification & Law 18-07 / 25-11 Safeguards
+1. **Why Selecting `sqlite3mc` Alone Does Not Establish AES-256 & Why We Explicitly Select `chacha20` (`ChaCha20-Poly1305` 256-bit AEAD):**
+   - Bundling **SQLite3MultipleCiphers (`sqlite3mc`)** via the `package:sqlite3` (`^3.8.0`) Native Assets build hook (`hooks.user_defines.sqlite3.source: sqlite3mc`) supports multiple cipher schemes (`chacha20`, `sqlcipher`, `aes256cbc`, etc.), and its documented default cipher is **`chacha20` (`sqleet` IETF ChaCha20-Poly1305 AEAD)**—**not** AES-256.
+   - Rather than relying on an implicit library default or assuming AES-256, WalimApp **explicitly selects and configures `chacha20` (`ChaCha20-Poly1305` 256-bit authenticated encryption, `legacy = 0`)** for all local `venues/<venue_id>.db` SQLite databases (while `.walimbak` backup archives use 64 KiB streaming `AES-256-GCM`).
+   - **Technical Justification for `chacha20` (`ChaCha20-Poly1305`):**
+     1. **256-Bit Authenticated Encryption (AEAD):** Every 4,096-byte SQLite page is encrypted with a 256-bit key (`PBKDF2-HMAC-SHA256`), per-page nonce, and 128-bit `Poly1305` MAC (RFC 8439).
+     2. **Consistent Performance on Budget Android Hardware (`NFR-03`):** On entry-level Android phones lacking ARMv8 Crypto Extensions, `ChaCha20-Poly1305` is 3x–4x faster in software than `AES-256-CBC + HMAC-SHA512` (`sqlcipher`), while performing equally fast on Windows `x64`.
+     3. **Native `sqlite3mc` Mode (`legacy = 0`):** Avoids legacy SQLCipher page-header quirks during `VACUUM INTO` backup snapshots.
+2. **Mandatory Pre-Key Configuration & Fail-Closed Runtime Verification (Debug, Profile, and Release Builds):**
+   - In `NativeDatabase.createInBackground(dbFile, setup: (rawDb) { ... })`, the cipher scheme **MUST be explicitly configured BEFORE applying `PRAGMA key`**, and the active cipher **MUST be verified at runtime across `debug`, `profile`, and `release` builds** (never inside `assert(...)`, which is stripped in release builds):
      ```dart
-     final cipherCheck = rawDb.select('PRAGMA cipher;');
-     if (cipherCheck.isEmpty) {
+     // 1. Explicitly select the cipher scheme BEFORE applying PRAGMA key
+     rawDb.execute("PRAGMA cipher = 'chacha20';");
+     rawDb.execute('PRAGMA legacy = 0;');
+
+     // 2. Unconditional fail-closed verification (active in debug, profile, AND release builds):
+     //    Verify both that sqlite3mc is linked AND that the active cipher is 'chacha20'
+     final configRows = rawDb.select("SELECT sqlite3mc_config('cipher') AS active_cipher;");
+     final pragmaRows = rawDb.select('PRAGMA cipher;');
+     final activeCipher = (configRows.isNotEmpty
+             ? configRows.first['active_cipher']
+             : (pragmaRows.isNotEmpty ? pragmaRows.first.values.first : null))
+         ?.toString()
+         .toLowerCase();
+     if (activeCipher != 'chacha20') {
        rawDb.dispose();
-       throw StateError('FATAL: SQLite encryption cipher (sqlite3mc) is not loaded. Failing closed.');
+       throw StateError(
+         'FATAL: Expected sqlite3mc cipher "chacha20", but got "$activeCipher". '
+         'Failing closed to prevent unencrypted or mismatched database access.',
+       );
      }
-     rawDb.execute("PRAGMA key = '...';");
-     // Immediately verify key can read sqlite_master (fails with SQLITE_NOTADB on wrong key)
+
+     // 3. Apply the per-venue 256-bit key and verify sqlite_master readability
+     rawDb.execute("PRAGMA key = \"x'$hexKey256'\";");
      rawDb.select('SELECT count(*) FROM sqlite_master;');
+     rawDb.execute('PRAGMA foreign_keys = ON;');
+     rawDb.execute('PRAGMA journal_mode = WAL;');
      ```
+   - **Mandatory Pre-Feature Android & Windows Proof-of-Technology (PoT) Gate (Sprint 1.1):** Before implementing any domain tables or feature screens in Sprint 1.1, a standalone PoT test must run on **both Android and Windows (`x64`) across `debug`, `profile`, and `release` builds**, verifying that `active_cipher == 'chacha20'`, that raw bytes `0..15` on disk are not `"SQLite format 3\x00"`, that opening without the key fails with `SQLiteException`, and that `VACUUM INTO` produces an encrypted snapshot passing `PRAGMA integrity_check`.
    - **Platform Key Storage & Recovery:** The per-venue 256-bit DB key is stored in OS-protected credential storage (`Android Keystore` on Android; `Windows DPAPI Credential Manager` on Windows). If the OS credential store is wiped (e.g., OS reinstall or device loss), local data is recovered on a Local device by restoring the latest `.walimbak` backup using the owner's `DEC-06` backup passphrase/Recovery Sheet, or on a Connect device by logging in and re-syncing from the server.
-2. **Data Minimization & Optional NIN/CNI:**
+3. **Data Minimization & Optional NIN/CNI:**
    - Public `booking_requests` collect only name, phone/WhatsApp, event date/slot, guest count, and optional note.
    - Customer national ID (`national_id_number` / NIN / CNI) in `customers` is **strictly optional** (collapsed by default), excluded from search indexes and list views, encrypted inside `venues/<venue_id>.db` and `.walimbak`, and erased when customer anonymization is triggered.
-3. **Explicit Consent & Legal/ANPDP Review Gate (`DEC-10`, `P2-4`):**
-   - Public booking request forms require an explicit Arabic/French consent checkbox recording `privacy_consent_at` and policy version.
+4. **Explicit Consent & Legal/ANPDP Review Gate (`DEC-10`, `P2-4`):**
+   - Public booking request forms require an explicit trilingual (`ar`/`fr`/`en`) consent checkbox recording `privacy_consent_at` and policy version.
    - **Legal Gate:** Formal legal compliance under Algerian **Law 18-07** and **Law 25-11** (including ANPDP declaration/authorization, final hosting jurisdiction selection between an Algerian datacenter vs. EU cloud region, third-party push/storage processors, consent text, and retention schedules) requires review and sign-off by qualified Algerian legal counsel before production cutover (`DEC-10`).
 
 ### 10.3 Streaming `.walimbak` Backup Encryption & Key Separation (`DEC-06`, `G-P3-1`)

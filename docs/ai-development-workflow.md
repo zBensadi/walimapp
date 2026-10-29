@@ -1,6 +1,6 @@
 # WalimApp — AI-Assisted & Spec-Driven Development Workflow
 
-- **Status:** Candidate Baseline v1.2-draft (Phase 0.2 — Pending Product Owner Approval)
+- **Status:** Candidate Baseline v1.3-draft (Phase 0.3 — Pending Product Owner Approval)
 - **Last Updated:** 2026-10-29
 - **Tooling Integration:** GitHub Spec Kit (`specify-cli` v1.2.5) integrated with Google Antigravity (`--integration agy`, PowerShell scripts).
 - **Related Documents:** [Project Constitution](../.specify/memory/constitution.md), [AGENTS.md](../AGENTS.md), [Roadmap](./roadmap.md), [Decision Register](./decision-register.md).
@@ -62,7 +62,7 @@ flowchart TD
    - Check [`docs/decision-register.md`](./decision-register.md) to ensure any blocking decisions for the current sprint slice are settled (or confirm use of their recommended defaults).
    - Generate `specs/<NNN-feature>/spec.md` referencing the `REQ-*` IDs from [`docs/product-requirements.md`](./product-requirements.md).
 2. **Step 2 — `/speckit-clarify`:**
-   - Run `/speckit-clarify` to surface edge cases (e.g., overnight slots crossing midnight, RTL layout behavior, offline conflict states, Android vs. Windows adapter behavior).
+   - Run `/speckit-clarify` to surface edge cases (e.g., overnight slots crossing midnight, trilingual `ar-DZ` RTL / `fr-DZ` LTR / `en` LTR layout & fallback behavior, offline conflict states, Android vs. Windows adapter behavior).
 3. **Step 3 — Product Owner Review Gate 1 (STOP):**
    - **Agent MUST STOP** and present `spec.md` to the Product Owner.
    - The Product Owner reviews `spec.md` (with ChatGPT if desired). The agent applies requested revisions and waits for explicit approval before running `/speckit-plan`.
@@ -70,7 +70,7 @@ flowchart TD
    - Produce `plan.md` adhering strictly to [`docs/architecture.md`](./architecture.md) and [`.specify/memory/constitution.md`](../.specify/memory/constitution.md).
    - Explicitly note shared Android/Windows components vs. any thin platform adapter touches.
 5. **Step 5 — `/speckit-checklist`:**
-   - Generate requirement verification checklists (e.g., data safety, RTL/LTR localization, offline behavior, security/tenant isolation).
+   - Generate requirement verification checklists (e.g., data safety, trilingual RTL/LTR localization & fallback, offline behavior, security/tenant isolation).
 6. **Step 6 — `/speckit-tasks`:**
    - Produce `tasks.md` broken into small, verifiable tasks with explicit file paths and test tasks.
 7. **Step 7 — `/speckit-analyze`:**
@@ -80,7 +80,7 @@ flowchart TD
    - Do **not** run `/speckit-implement` or create application code until the Product Owner explicitly approves.
 9. **Step 9 — `/speckit-implement` (Scoped Execution):**
    - Execute only the approved feature or task slice.
-   - Follow Test-First / TDD discipline for domain invariants (`sqlite3mc` fail-closed `PRAGMA cipher` startup check, slot overlaps, unconditional `payments` immutability, per-venue DB crypto-erasure, auth-first `payload_sha256` sync idempotency, `outbox_seq` ordering, `scanned_through_seq` cursor, license verification).
+   - Follow Test-First / TDD discipline for domain invariants (`sqlite3mc` explicit `PRAGMA cipher = 'chacha20'; PRAGMA legacy = 0;` pre-key configuration and fail-closed `SELECT sqlite3mc_config('cipher');` / `PRAGMA cipher;` startup check across `debug`/`profile`/`release` builds, slot overlaps, unconditional `payments` immutability, per-venue DB crypto-erasure, auth-first `payload_sha256` sync idempotency, `outbox_seq` ordering, `scanned_through_seq` cursor, Connect device limits & `agreed_price_dzd` snapshot immutability, license verification).
 10. **Step 10 — Automated Tests, Code Review & `/speckit-converge`:**
     - Run static analysis (`flutter analyze` / `dart analyze` for `apps/owner`; `phpstan` / `pint` for `backend`) and automated test suites (`flutter test`; `php artisan test`).
     - Run `/speckit-converge` to confirm every requirement in `spec.md` and task in `tasks.md` is actually implemented and tested.
@@ -105,8 +105,8 @@ Whenever the Product Owner requests an audit—or when the agent detects a contr
 
 | Layer | Required Verification Commands | Mandatory Invariants Tested |
 | :--- | :--- | :--- |
-| **Flutter Client (`apps/owner`) & Issuer CLI (`tools/license-issuer`)** | `flutter analyze` & `flutter test` | Fail-closed `sqlite3mc` (`PRAGMA cipher;`) startup check, slot overlap detection (`[starts_at_local, ends_at_local)` in `'YYYY-MM-DDTHH:mm:ss'` including overnight), SQLite `payments` unconditional immutability trigger (rejecting updates/deletes on **all** columns), per-venue DB cryptographic erasure (`venues/<venue_id>.db`) on revocation/downgrade, integer whole-Dinar `MoneyDzd` (`*_dzd BIGINT`), `local_actors` attribution, `sync_outbox` monotonic `outbox_seq` + dependency blocking + pre-push binary asset upload, clock-rollback-resistant 72h `OfflineAccessLease`, WAL-safe `VACUUM INTO` + 64 KiB streaming `AES-256-GCM` `.walimbak` backups, Ed25519 `.walimlic` perpetual verification (`max_venues = 1`, `max_halls = null`) & `LicenseSigner` CLI signing, `ar-DZ` RTL PDF shaping & Western numerals (`0-9`), adaptive `<600dp` vs `>=600dp` widget tests, and `p95 < 100ms` benchmark. |
-| **Laravel Backend (`backend` — Stage 2A+)** | `./vendor/bin/pint --test`, `./vendor/bin/phpstan analyse`, `php artisan test` | PostgreSQL `btree_gist` double-booking exclusion under concurrency, `booking_requests` vs `reservations` separation, atomic request approval, auth-first `sync_processed_operations` idempotency (`payload_sha256` verification), `venue_sync_state.last_seq` `FOR UPDATE` commit serialization, `scanned_through_seq` role-filtered delta pull cursor, `permissions_hash` cursor reset on role change, safe partial updates on `is_financial_masked` rows, binary asset sync (`PUT/GET /api/v1/sync/assets/{sha256}`), staged migration dry-run (12 relational entities + `migration_assets_manifest` content-addressed upload + pure-DB promotion + lost-response `committed_receipt_json` recovery), 69-Wilaya seeding. |
+| **Flutter Client (`apps/owner`) & Issuer CLI (`tools/license-issuer`)** | `flutter analyze` & `flutter test` (+ Sprint 1.1 Android & Windows `debug`/`profile`/`release` PoT) | Pre-feature Android (`API 24+`) & Windows (`x64`) `sqlite3mc` proof-of-technology test (`PRAGMA cipher = 'chacha20'; PRAGMA legacy = 0;` before `PRAGMA key`, fail-closed `SELECT sqlite3mc_config('cipher');` / `PRAGMA cipher;` == `'chacha20'` in `debug`, `profile`, and `release` builds, raw-file non-plaintext check, wrong-key `SQLITE_NOTADB` rejection), slot overlap detection (`[starts_at_local, ends_at_local)` in `'YYYY-MM-DDTHH:mm:ss'` including overnight), SQLite `payments` unconditional immutability trigger (rejecting updates/deletes on **all** columns), per-venue DB cryptographic erasure (`venues/<venue_id>.db`) on device/membership revocation or financial downgrade, integer whole-Dinar `MoneyDzd` (`*_dzd BIGINT`), `local_actors` attribution (`language_pref`), `sync_outbox` monotonic `outbox_seq` + dependency blocking + pre-push binary asset upload, clock-rollback-resistant 72h `OfflineAccessLease`, WAL-safe `VACUUM INTO` + 64 KiB streaming `AES-256-GCM` `.walimbak` backups, Ed25519 `.walimlic` perpetual verification (`max_venues = 1`, `max_halls = null`) & `LicenseSigner` CLI signing, trilingual (`ar-DZ` RTL, `fr-DZ` LTR, `en` LTR) UI & PDF shaping with Western numerals (`0-9`), adaptive `<600dp` vs `>=600dp` widget tests, and `p95 < 100ms` benchmark. |
+| **Laravel Backend (`backend` — Stage 2A+)** | `./vendor/bin/pint --test`, `./vendor/bin/phpstan analyse`, `php artisan test` | PostgreSQL `btree_gist` double-booking exclusion under concurrency, `booking_requests` vs `reservations` separation, atomic request approval, Connect subscription device limits (`Basic: 1 active device` vs. `Higher-Capacity: up to 5 active devices`, `409 DEVICE_LIMIT_REACHED`), Owner/Super-Admin device replacement & revocation (`401 DEVICE_REVOKED`), mandatory individual user accounts & RBAC decoupled from device limits (`max_active_devices != max_users`), `subscriptions.agreed_price_dzd` & limit snapshot immutability when `subscription_plans` templates are edited, auth-first `sync_processed_operations` idempotency (`payload_sha256` verification), `venue_sync_state.last_seq` `FOR UPDATE` commit serialization, `scanned_through_seq` role-filtered delta pull cursor, `permissions_hash` cursor reset on role change, safe partial updates on `is_financial_masked` rows, binary asset sync (`PUT/GET /api/v1/sync/assets/{sha256}`), staged migration dry-run (12 relational entities + `migration_assets_manifest` content-addressed upload + pure-DB promotion + lost-response `committed_receipt_json` recovery), trilingual marketplace (`ar-DZ`, `fr-DZ`, `en`) optional content fallback (`en -> fr -> ar`, `fr -> ar -> en`, `ar -> fr -> en`), and 69-Wilaya seeding. |
 
 ---
 
