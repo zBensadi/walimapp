@@ -1,6 +1,6 @@
 # WalimApp — AI-Assisted & Spec-Driven Development Workflow
 
-- **Status:** Baseline v1.1 (Phase 0 Post-Audit Consolidated)
+- **Status:** Candidate Baseline v1.2-draft (Phase 0.2 — Pending Product Owner Approval)
 - **Last Updated:** 2026-10-29
 - **Tooling Integration:** GitHub Spec Kit (`specify-cli` v1.2.5) integrated with Google Antigravity (`--integration agy`, PowerShell scripts).
 - **Related Documents:** [Project Constitution](../.specify/memory/constitution.md), [AGENTS.md](../AGENTS.md), [Roadmap](./roadmap.md), [Decision Register](./decision-register.md).
@@ -80,7 +80,7 @@ flowchart TD
    - Do **not** run `/speckit-implement` or create application code until the Product Owner explicitly approves.
 9. **Step 9 — `/speckit-implement` (Scoped Execution):**
    - Execute only the approved feature or task slice.
-   - Follow Test-First / TDD discipline for domain invariants (slot overlaps, unconditional `payments` immutability, sync idempotency, `outbox_seq` ordering, license verification).
+   - Follow Test-First / TDD discipline for domain invariants (`sqlite3mc` fail-closed `PRAGMA cipher` startup check, slot overlaps, unconditional `payments` immutability, per-venue DB crypto-erasure, auth-first `payload_sha256` sync idempotency, `outbox_seq` ordering, `scanned_through_seq` cursor, license verification).
 10. **Step 10 — Automated Tests, Code Review & `/speckit-converge`:**
     - Run static analysis (`flutter analyze` / `dart analyze` for `apps/owner`; `phpstan` / `pint` for `backend`) and automated test suites (`flutter test`; `php artisan test`).
     - Run `/speckit-converge` to confirm every requirement in `spec.md` and task in `tasks.md` is actually implemented and tested.
@@ -105,8 +105,8 @@ Whenever the Product Owner requests an audit—or when the agent detects a contr
 
 | Layer | Required Verification Commands | Mandatory Invariants Tested |
 | :--- | :--- | :--- |
-| **Flutter Client (`apps/owner`) & Issuer CLI (`tools/license-issuer`)** | `flutter analyze` & `flutter test` | Slot overlap detection (`[starts_at_local, ends_at_local)` including overnight), SQLite `payments` unconditional immutability trigger (rejecting updates on **all** columns), integer whole-Dinar `MoneyDzd` (`*_dzd BIGINT`), `sync_outbox` monotonic `outbox_seq` & dependency blocking, WAL-safe `VACUUM INTO` `.walimbak` integrity check & independent DEK encryption, Ed25519 `.walimlic` perpetual verification & CLI signing, `ar-DZ`/`fr-DZ` Western numerals (`0-9`), adaptive `<600dp` vs `>=600dp` widget tests, and `p95 < 100ms` benchmark. |
-| **Laravel Backend (`backend` — Phase 2+)** | `./vendor/bin/pint --test`, `./vendor/bin/phpstan analyse`, `php artisan test` | PostgreSQL `btree_gist` double-booking exclusion under concurrency, `booking_requests` vs `reservations` separation, atomic request approval, `sync_processed_operations` idempotency, `venue_sync_state.last_seq` `FOR UPDATE` commit serialization, `permissions_hash` cursor reset on role change, `is_financial_masked` safety, staged migration dry-run (including `contract_templates` and `generated_documents` SHA-256 verification), 69-Wilaya seeding. |
+| **Flutter Client (`apps/owner`) & Issuer CLI (`tools/license-issuer`)** | `flutter analyze` & `flutter test` | Fail-closed `sqlite3mc` (`PRAGMA cipher;`) startup check, slot overlap detection (`[starts_at_local, ends_at_local)` in `'YYYY-MM-DDTHH:mm:ss'` including overnight), SQLite `payments` unconditional immutability trigger (rejecting updates/deletes on **all** columns), per-venue DB cryptographic erasure (`venues/<venue_id>.db`) on revocation/downgrade, integer whole-Dinar `MoneyDzd` (`*_dzd BIGINT`), `local_actors` attribution, `sync_outbox` monotonic `outbox_seq` + dependency blocking + pre-push binary asset upload, clock-rollback-resistant 72h `OfflineAccessLease`, WAL-safe `VACUUM INTO` + 64 KiB streaming `AES-256-GCM` `.walimbak` backups, Ed25519 `.walimlic` perpetual verification (`max_venues = 1`, `max_halls = null`) & `LicenseSigner` CLI signing, `ar-DZ` RTL PDF shaping & Western numerals (`0-9`), adaptive `<600dp` vs `>=600dp` widget tests, and `p95 < 100ms` benchmark. |
+| **Laravel Backend (`backend` — Stage 2A+)** | `./vendor/bin/pint --test`, `./vendor/bin/phpstan analyse`, `php artisan test` | PostgreSQL `btree_gist` double-booking exclusion under concurrency, `booking_requests` vs `reservations` separation, atomic request approval, auth-first `sync_processed_operations` idempotency (`payload_sha256` verification), `venue_sync_state.last_seq` `FOR UPDATE` commit serialization, `scanned_through_seq` role-filtered delta pull cursor, `permissions_hash` cursor reset on role change, safe partial updates on `is_financial_masked` rows, binary asset sync (`PUT/GET /api/v1/sync/assets/{sha256}`), staged migration dry-run (12 relational entities + `migration_assets_manifest` content-addressed upload + pure-DB promotion + lost-response `committed_receipt_json` recovery), 69-Wilaya seeding. |
 
 ---
 

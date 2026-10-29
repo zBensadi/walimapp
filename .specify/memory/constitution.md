@@ -1,15 +1,16 @@
 <!--
-Sync Impact Report (WalimApp Constitution v1.1.0 — Phase 0 Post-Audit Revision)
-- Version change: 1.0.0 -> 1.1.0 (Phase 0 independent audit refinements)
+Sync Impact Report (WalimApp Constitution v1.2.0-draft — Phase 0.2 Post-Audit Revision)
+- Version change: 1.1.0 -> 1.2.0-draft (Marked as Draft pending explicit Product Owner ratification; incorporates Round 2 and Gemini 3.1 Pro audit refinements)
 - Modified Principles & Sections:
-  - I. Data Safety & Financial Ledger Immutability: Clarified unconditional UPDATE/DELETE prohibition on all columns of `payments`, integer whole-DZD (`*_dzd BIGINT`) standard, WAL-safe `VACUUM INTO` backups with independent DEK/KEK encryption (never derived from license keys), and full document/template preservation in staged migration.
-  - II. Genuine Local Independence & Perpetual Ownership: Clarified that WalimApp Local is a single-device offline edition, and Phase 1 includes a secure offline operator CLI (`tools/license-issuer`) for signing `.walimlic` files outside the client repo.
-  - III. Shared Android & Windows Offline-First Client: Clarified that shared multi-user/multi-device calendar synchronization across phones and PCs is delivered by WalimApp Connect (Phase 2) atop the Phase 1 shared codebase foundation.
-  - IV. Server-Enforced Authorization, Tenant Isolation & Booking Integrity: Added monotonic local `outbox_seq`, per-venue serialized `venue_sync_state` cursor, permission-hash cursor reset on role change, and realistic offline revocation bounds (Offline Access Lease TTL + wipe on next reconnection).
-  - Architectural & Domain Constraints: Updated stack baseline with verified Composer compatibility matrix (Laravel 12/Filament v4 vs. Laravel 13/Filament v5 evaluated at Phase 2 gate; current Flutter stable 3.44+/3.47+ pinned at Phase 1 start), SQLCipher encryption at rest, and ANPDP legal review gate.
+  - Status & Ratification Footer: Explicitly marked `Status: Draft — Pending Product Owner Ratification` (`P0-1`).
+  - I. Data Safety & Financial Ledger Immutability: Added local actor attribution (`recorded_by_actor_name` / `local_actors`) surviving migration (`P1-6`), separation of append-only `payments` triggers from per-venue DB file crypto-erasure on role downgrade/revocation (`P1-2`), content-addressed binary asset migration (`P1-5`, `P1-7`), and chunked streaming `.walimbak` encryption (`G-P3-1`).
+  - II. Genuine Local Independence & Perpetual Ownership: Clarified `LicenseSigner` interface for non-exportable keys (`P1-9`) and one physical venue with unlimited halls by default (`P0-3`, `P2-3`).
+  - IV. Server-Enforced Authorization, Tenant Isolation & Booking Integrity: Added auth-first idempotency check with `payload_sha256` binding (`P1-4`), `scanned_through_seq` high-water-mark delta cursor (`P1-3`), Connect binary asset sync (`G-P1-1`), safe server-side stripping of masked financial fields on non-financial reservation edits (`G-P1-2`), and clock-rollback-resistant 72h `OfflineAccessLease` (`G-P2-1`).
+  - VI. Human Review Gates & Incremental Phased Delivery: Updated roadmap stages to support Value-First Interleaved Sequencing (`P0-2`, `DEC-01` Option B).
+  - Architectural & Domain Constraints: Replaced EOL `sqlcipher_flutter_libs` with `drift` (`^2.35.0`) + `sqlite3` (`^3.8.0`) Native Assets build hooks (`sqlite3mc`) and fail-closed runtime `PRAGMA cipher` verification (`P1-1`, `P1-8`).
 -->
 
-# WalimApp Constitution
+# WalimApp Constitution (Draft — Pending Product Owner Ratification)
 
 ## Core Principles
 
@@ -18,20 +19,21 @@ Sync Impact Report (WalimApp Constitution v1.1.0 — Phase 0 Post-Audit Revision
 Customer records, confirmed reservations, contracts, generated documents, and financial history MUST never be silently overwritten, lost, or duplicated during local usage, backup restoration, Local-to-Connect migration, or multi-device synchronization.
 
 - **Canonical Integer Whole-DZD Money**: All monetary values across SQLite, PostgreSQL, DTOs, checksums, and PDFs MUST be stored and calculated as integer **whole Algerian Dinars (`BIGINT` `DZD`, column suffix `*_dzd`)**. Floating-point types (`FLOAT`, `DOUBLE`) and mixed centime/whole-Dinar representations are strictly forbidden.
-- **Unconditionally Append-Only Financial Ledger**: Recorded `payments` rows are completely immutable. Database triggers (`BEFORE UPDATE OR DELETE ON payments`) in both SQLite and PostgreSQL MUST reject **all** `UPDATE` and `DELETE` operations on **every column** of `payments`. Corrections to any field (amount, method, date, or note) MUST be recorded by inserting a new `refund` or `adjustment` row referencing `parent_payment_id` with a mandatory `reason` and actor attribution.
-- **Idempotent & Causally Ordered Sync**: Every mutating synchronization operation MUST carry a client-generated `operation_id` (UUIDv7), be ordered locally by a strictly monotonic `outbox_seq` (never client wall-clock timestamps), enforce parent-before-child dependency blocking, and be deduplicated by the server before execution.
-- **Non-Destructive Staged Migration (Data + Documents)**: Local-to-Connect migration MUST upload a complete snapshot (including `contract_templates`, `generated_documents` metadata, and binary PDF/media files verified by SHA-256 checksum) to server staging tables/storage, validate entity counts, foreign-key integrity, slot overlaps, and per-reservation financial checksums on the server, and promote in a single database transaction before the local client marks the venue as migrated.
-- **WAL-Safe Verified Backups with Independent Keys**: Local backups (`.walimbak`) MUST be created from a consistent SQLite snapshot (`VACUUM INTO`) and verified (`PRAGMA integrity_check`) before replacing the active database (preserving a `.pre_restore` copy). Backup encryption keys (DEK/KEK) MUST be cryptographically independent of license keys (`DEC-06`).
+- **Unconditionally Append-Only Financial Ledger & Actor Attribution**: Recorded `payments` rows are completely immutable. Database triggers (`BEFORE UPDATE OR DELETE ON payments`) in both SQLite and PostgreSQL MUST reject **all** `UPDATE` and `DELETE` operations on **every column** of `payments`. Corrections to any field (amount, method, date, or note) MUST be recorded by inserting a new `refund` or `adjustment` row referencing `parent_payment_id` with a mandatory `reason` and persistent actor attribution (`recorded_by_actor_name` + `recorded_by_local_actor_id` in Local mode, plus `recorded_by_user_id` in Connect mode).
+- **Idempotent, Authorized & Causally Ordered Sync**: Every mutating synchronization operation MUST carry a client-generated `operation_id` (UUIDv7) and `payload_sha256`, be ordered locally by a strictly monotonic `outbox_seq` (never client wall-clock timestamps), enforce parent-before-child dependency blocking (and binary-before-metadata upload for generated PDFs/logos), and verify current caller authentication and venue authorization on the server *before* returning any deduplicated idempotency result.
+- **Non-Destructive Staged Migration (Relational Data + Content-Addressed Assets)**: Local-to-Connect migration MUST upload all relational entities (including `local_actors`, `contract_templates`, and `generated_documents` metadata) to server staging tables and upload all binary assets (`generated_documents` PDFs and `venue_logo`) to content-addressed object storage (`sha256_checksum`) *before* executing an atomic PostgreSQL promotion transaction with idempotent lost-response recovery.
+- **WAL-Safe Streaming Backups with Independent Keys**: Local backups (`.walimbak`) MUST be created from a consistent SQLite snapshot (`VACUUM INTO`), verified (`PRAGMA integrity_check`), and encrypted via chunked streaming `AES-256-GCM` before replacing any active database (preserving a `.pre_restore` copy). Backup encryption keys (DEK/KEK) MUST be cryptographically independent of license keys (`DEC-06`).
 
 **Rationale**: Wedding venues manage high-value events and installment deposits in Algerian Dinar (`DZD`). Silent financial drift, partial updates, or lost reservation/contract records destroy owner trust and create severe legal and financial liability.
 
 ### II. Genuine Local Independence & Perpetual Ownership (NON-NEGOTIABLE)
 
-**WalimApp Local** is a **single-device offline edition** that MUST operate indefinitely on an Android smartphone or a Windows desktop PC using local SQLite storage without requiring internet connectivity, cloud accounts, central servers, or LAN synchronization.
+**WalimApp Local** is a **single-device offline edition** that MUST operate indefinitely on an Android smartphone or a Windows desktop PC using local encrypted SQLite storage without requiring internet connectivity, cloud accounts, central servers, or LAN synchronization.
 
-- **No Network Dependency in Local Mode**: Core single-device venue management workflows (calendar, reservations, customers, payments, expenses, Arabic/French PDF contracts and receipts, and local backups) MUST execute 100% offline against local SQLCipher/Drift tables.
+- **No Network Dependency in Local Mode**: Core single-device venue management workflows (calendar, reservations, customers, payments, expenses, Arabic/French PDF contracts and receipts, and local backups) MUST execute 100% offline against local encrypted Drift/SQLite tables.
 - **Perpetual License Integrity**: Expiry of an optional annual maintenance/update window (`updates_until`) MUST NEVER disable, degrade, watermark, or lock any feature of a purchased and activated WalimApp Local version, nor restrict access to local data.
-- **Secure Offline License Issuance**: Private Ed25519 signing keys MUST NEVER be placed in the Flutter client or repository. Phase 1 licenses are signed offline via a dedicated operator tool (`tools/license-issuer`) using an externalized private key and recorded in an operator ledger prior to Phase 2 Super-Admin import.
+- **Secure Offline License Issuance (`LicenseSigner`)**: Private Ed25519 signing keys MUST NEVER be placed in the Flutter client or repository. Standalone offline license signing (`tools/license-issuer`) MUST use a `LicenseSigner` abstraction that supports non-exportable hardware/OS-keystore signing operations as well as encrypted offline key vaults, recording every issued or transferred license in an operator ledger (`issued-licenses.jsonl`).
+- **One Physical Venue with Unlimited Halls by Default**: A WalimApp Local license covers 1 physical venue with multiple bookable halls/spaces and imposes no arbitrary hall cap in the database schema (`max_halls` in `.walimlic` is nullable/unlimited unless a commercial tier explicitly sets it).
 - **Honest Single-Device Local Semantics**: Local-only installations are independent single-device systems and MUST NOT claim multi-device or multi-user calendar synchronization without upgrading to WalimApp Connect.
 
 **Rationale**: Many Algerian wedding halls operate in environments with intermittent connectivity or prefer perpetual single-device software ownership, while multi-device teams require Connect's server-arbitrated synchronization.
@@ -40,9 +42,9 @@ Customer records, confirmed reservations, contracts, generated documents, and fi
 
 WalimApp MUST use a single shared Flutter codebase (`apps/owner`) targeting both Android smartphones and Windows desktops across both the Local (single-device) and Connect (multi-device synced) editions.
 
-- **Single Owner Codebase**: Domain models, value objects, Drift/SQLCipher repositories, synchronization outbox logic, authentication, permissions, and reservation/financial use cases MUST be shared across Android and Windows. Creating separate mobile and desktop codebases or duplicating business rules is forbidden.
+- **Single Owner Codebase**: Domain models, value objects, Drift/SQLite repositories, synchronization outbox logic, authentication, permissions, and reservation/financial use cases MUST be shared across Android and Windows. Creating separate mobile and desktop codebases or duplicating business rules is forbidden.
 - **Adaptive UX by Form Factor**: Presentations MUST adapt via responsive layout breakpoints (`< 600dp` touch-first phone layout with bottom navigation and bottom sheets on Android; `>= 600dp` / `>= 1024px` desktop layout with `NavigationRail`, master-detail split panes, and keyboard shortcuts on Windows).
-- **Thin Platform Adapters**: Platform-specific differences (device identity, secure credential storage, backup file picking, PDF printing/sharing, single-instance lock) MUST be isolated behind narrow adapter interfaces (`lib/platform/`).
+- **Thin Platform Adapters**: Platform-specific differences (device identity, OS-protected credential storage, backup file picking, PDF printing/sharing, single-instance lock) MUST be isolated behind narrow adapter interfaces (`lib/platform/`).
 
 **Rationale**: Algerian venue owners and managers frequently work from Android smartphones on-site while reception or accounting staff use Windows PCs at the office. A single codebase eliminates double maintenance for a solo developer.
 
@@ -50,8 +52,11 @@ WalimApp MUST use a single shared Flutter codebase (`apps/owner`) targeting both
 
 Client UI checks are convenience only; the Laravel backend and PostgreSQL database are the ultimate authority for multi-tenant isolation, role permissions, and central booking conflicts.
 
-- **Strict Tenant Isolation**: Every tenant-owned table in PostgreSQL MUST carry `organization_id` (and `venue_id` where venue-scoped). Every API query, sync delta pull, and mutation MUST enforce organization and venue membership on the server.
-- **Venue-Scoped Multi-User Access & Safe Sync Filtering**: In WalimApp Connect, each employee or manager authenticates with an individual user account on their own authorized device and receives a venue-scoped role (`owner`, `manager`, `receptionist`, `accountant`, `viewer`). Financial totals and sensitive actions MUST be filtered server-side. Role changes MUST trigger a `permissions_hash` cursor reset/re-sync so upgraded users receive historical financial data and downgraded/revoked users purge restricted cached records upon reconnection.
+- **Strict Tenant Isolation**: Every tenant-owned table in PostgreSQL MUST carry `organization_id` (and `venue_id` where venue-scoped). Every API query, sync delta pull, idempotency replay, and mutation MUST enforce active organization and venue membership on the server.
+- **Venue-Scoped Multi-User Access, Safe Sync Filtering & Per-Venue Crypto-Erasure**:
+  - In WalimApp Connect, each employee or manager authenticates with an individual user account on their own authorized device and receives a venue-scoped role (`owner`, `manager`, `receptionist`, `accountant`, `viewer`).
+  - Financial totals and `payments`/`expenses` rows MUST be filtered server-side for non-financial roles (`is_financial_masked = true`), while the server strips/ignores masked financial columns on incoming non-financial reservation edits so legitimate operational updates (e.g., `guest_count`, `notes`) succeed.
+  - Because `payments` rows are protected by an unconditional `BEFORE UPDATE OR DELETE` trigger, local cache purging upon membership revocation or role downgrade MUST operate by closing and cryptographically erasing/replacing the per-venue local database file (`venues/<venue_id>.db` + its `SecureCredentialStore` key) rather than issuing SQL `DELETE` statements against `payments`.
 - **Separation of Booking Requests and Reservations**: Public marketplace inquiries MUST be stored in `booking_requests` (`pending`, `approved`, `rejected`, `expired`, `cancelled_by_requester`) and MUST NEVER be inserted directly into `reservations` or block slots until an authorized owner/manager explicitly approves them.
 - **Database-Level Double-Booking Prevention**: Confirmed and tentative reservations MUST be protected against double-booking at the PostgreSQL engine level using a `btree_gist` exclusion constraint on `(hall_id, tsrange(starts_at_local, ends_at_local, '[)'))`.
 - **Distinct Client Sync State**: Unsynchronized local edits MUST be represented as a client-side `pending_sync` overlay derived from `sync_outbox`, never conflated with the domain reservation `status`.
@@ -62,25 +67,27 @@ Client UI checks are convenience only; the Laravel backend and PostgreSQL databa
 
 Every functional and non-functional requirement MUST be phrased so it can be verified by an automated test or a deterministic acceptance check.
 
-- **Mandatory Coverage of Critical Invariants**: Automated tests MUST cover slot-overlap detection (including overnight slots crossing midnight), `booking_requests` approval races, unconditional append-only payment trigger enforcement on all columns, idempotent `operation_id` replay, monotonic `outbox_seq` dependency ordering, permission-change cursor reset, Local-to-Connect staged migration validation (including document checksums), tenant isolation boundaries, and Ed25519 license verification.
-- **Bilingual & Formatting Verification**: User-facing features and PDF documents MUST be tested in both Arabic (`ar-DZ`, RTL) and French (`fr-DZ`, LTR), enforcing Western Arabic numerals (`0-9`) and integer whole Dinar (`DZD` / `د.ج`) formatting.
+- **Mandatory Coverage of Critical Invariants**: Automated tests MUST cover fail-closed SQLite encryption startup (`PRAGMA cipher`), slot-overlap detection (including overnight slots crossing midnight), `booking_requests` approval races, unconditional append-only payment trigger enforcement on all columns, auth-first idempotent `operation_id` + `payload_sha256` replay, monotonic `outbox_seq` dependency ordering, `scanned_through_seq` filtered cursor advancement, per-venue DB crypto-erasure on role downgrade/revocation, Local-to-Connect staged migration validation (including content-addressed binary checksums and lost-response commit retry), tenant isolation boundaries, and Ed25519 license verification.
+- **Bilingual & Formatting Verification**: User-facing features and PDF documents MUST be tested in both Arabic (`ar-DZ`, RTL, including an early Arabic shaping proof-of-technology) and French (`fr-DZ`, LTR), enforcing Western Arabic numerals (`0-9`) and integer whole Dinar (`DZD` / `د.ج`) formatting.
 
 **Rationale**: An AI-assisted solo developer relies on deterministic automated tests to prevent regressions across phases.
 
 ### VI. Human Review Gates & Incremental Phased Delivery (NON-NEGOTIABLE)
 
-Development proceeds strictly feature-by-feature and phase-by-phase with mandatory Product Owner review gates.
+Development proceeds strictly feature-by-feature and stage-by-stage with mandatory Product Owner review gates.
 
 - **No Unattended Stage Jumping**: Generating a specification, clarification, plan, or task list MUST NEVER automatically trigger code implementation. The agent MUST stop at designated review gates (`spec.md` approval and `plan.md`/`tasks.md` approval) and wait for explicit Product Owner sign-off.
 - **Decision Gates Scoped to Dependent Slices**: Unresolved product decisions (`DEC-*`) MUST be resolved before specifying or implementing the specific sprint slice that depends on them, without artificially blocking unrelated earlier foundation work.
-- **Respect Delivery Phase Boundaries**:
-  - **Phase 1**: **WalimApp Local MVP** — single-device offline edition on the shared Android + Windows Flutter codebase, plus offline operator license-signing CLI.
-  - **Phase 2**: **WalimApp Connect** — central backend, shared multi-user/multi-device synchronized calendar across Android phones and Windows PCs, venue-scoped permissions, and staged Local-to-Connect migration.
-  - **Phase 3**: **Public Marketplace & Online Booking Requests** — SSR marketplace (`ar-DZ` / `fr-DZ`, 69 Wilayas) and owner-approved online booking requests.
-  - **Phase 4**: **Expansion** — self-serve advertising expansion, provider self-service portal, and 360° virtual tours.
-- **Deferred Feature Discipline**: Phase 4 features (360° virtual tours, provider self-registration) MUST NOT delay or complicate Phases 1–3.
+- **Value-First Interleaved Delivery Stages (`DEC-01`)**:
+  - **Stage 1A (Phase 1 Core Foundation & Single-Device Pilot — Sprints 1.1–1.3)**: Shared Android + Windows Flutter codebase, encrypted Drift/SQLite (`sqlite3mc`), 69-Wilaya seed, halls/slots/calendar, append-only `payments` ledger, and bilingual PDF contracts/receipts (delivering a single-device Android pilot).
+  - **Stage 2A (Phase 2 Connect Shared Multi-User Calendar — Sprints 2.1–2.3)**: Central Laravel + PostgreSQL 17 + Filament backend, individual user auth, venue-scoped RBAC, and multi-device sync across Android phones and Windows PCs (delivering the first commercial multi-user shared calendar release).
+  - **Stage 1B (Phase 1 Local Commercial Productization — Sprint 1.4)**: Desktop split-view polish, streaming `.walimbak` backups (`DEC-06`), and `.walimlic` offline licensing (`tools/license-issuer` / Admin signer).
+  - **Stage 2B (Phase 2 Staged Migration & Subscription Expiry — Sprint 2.4)**: Non-destructive Local-to-Connect migration (relational + content-addressed binary assets) and Connect expiry/renewal reconciliation.
+  - **Phase 3**: **Public Marketplace & Online Booking Requests** (`ar-DZ` / `fr-DZ` SSR across 69 Wilayas).
+  - **Phase 4**: **Expansion** (self-serve advertising, provider self-service portal, and 360° virtual tours).
+- **Deferred Feature Discipline**: Phase 4 features (360° virtual tours, provider self-registration) MUST NOT delay or complicate earlier stages.
 
-**Rationale**: Review gates with the Product Owner prevent architectural drift and wasted implementation effort.
+**Rationale**: Interleaving the Connect shared-calendar slice immediately after the offline core foundation delivers the high-value multi-phone family/team calendar early while preserving 100% shared code and review discipline.
 
 ### VII. Solo-Developer Operational Simplicity
 
@@ -95,14 +102,14 @@ Every architectural and infrastructure choice MUST be justifiable for a single d
 ## Architectural & Domain Constraints
 
 - **Stack Baseline & Version Governance**:
-  - **Owner App (Local & Connect)**: Current stable Flutter SDK (`3.44+` / `3.47+`, Dart `3.12+` / `3.13+`, pinned in `pubspec.lock` at Phase 1 Sprint 1.1 start), targeting Android (`API 24+`) and Windows Desktop (`x64`), with local encrypted SQLite via `drift` + `sqlcipher_flutter_libs`.
-  - **Central Backend & Admin (Phase 2)**: PHP 8.4 + Laravel modular monolith, PostgreSQL 17 (`btree_gist`, `pg_trgm`), Filament for Super-Admin, and server-side-rendered Laravel Blade + Tailwind CSS + Alpine.js for the public SEO marketplace. Both **Track 1 (`Laravel 13.x + Filament v5.x + Livewire v4.x + Tailwind v4.1+`, recommended for longer security support through March 2028)** and **Track 2 (`Laravel 12.x + Filament v4.x + Livewire v3.x`, security support through Feb 2027)** are verified via Composer dry-run resolution and finalized at the Phase 2 Sprint 2.1 planning gate (see [`docs/architecture.md`](../../docs/architecture.md)).
-- **Algeria 69-Wilaya Reference Standard**: Location tables (`wilayas`, `communes`) MUST be data-driven and seeded from an authoritative, versioned official dataset covering all **69 official Algerian Wilayas** with bilingual Arabic and French names and URL slugs. Hard-coding `1..58` constraints is forbidden.
-- **Algerian Data Protection Compliance (Law 18-07 & Law 25-11)**: Technical privacy capabilities (consent recording, SQLCipher/TLS encryption, optional NIN/CNI minimization, erasure/anonymization tools) MUST be built in, while formal legal compliance, ANPDP declaration, and production hosting jurisdiction (`DEC-10`) are gated on review by qualified Algerian legal counsel before production launch.
+  - **Owner App (Local & Connect)**: Current stable Flutter SDK (`3.44+` / `3.47+`, Dart `3.12+` / `3.13+`, pinned in `pubspec.lock` at Sprint 1.1 start), targeting Android (`API 24+`) and Windows Desktop (`x64`), with local encrypted SQLite via `drift` (`^2.35.0`) + `sqlite3` (`^3.8.0`) configured with Dart Native Assets build hooks (`hooks.user_defines.sqlite3.source: sqlite3mc` — SQLite3MultipleCiphers, failing closed at runtime if `PRAGMA cipher` is unavailable).
+  - **Central Backend & Admin (Phase 2)**: PHP 8.4 + Laravel modular monolith, PostgreSQL 17 (`btree_gist`, `pg_trgm`), Filament for Super-Admin, and server-side-rendered Laravel Blade + Tailwind CSS + Alpine.js for the public SEO marketplace. Both **Track 1 (`Laravel 13.x + Filament v5.x + Livewire v4.x + Tailwind v4.1+`, recommended for longer security support through March 2028)** and **Track 2 (`Laravel 12.x + Filament v4.x + Livewire v3.x`, security support through Feb 2027)** are verified via Composer dry-run resolution and locked at the Sprint 2.1 planning gate (see [`docs/architecture.md`](../../docs/architecture.md)).
+- **Algeria 69-Wilaya Reference Standard**: Location tables (`wilayas`, `communes`) MUST be data-driven and seeded from an authoritative, versioned official dataset (verified in Sprint 1.1 before use) covering all **69 official Algerian Wilayas** and 1,541 communes with bilingual Arabic and French names and URL slugs. Hard-coding `1..58` constraints is forbidden.
+- **Algerian Data Protection Compliance (Law 18-07 & Law 25-11)**: Technical privacy capabilities (consent recording, `sqlite3mc`/TLS encryption, optional NIN/CNI minimization, erasure/anonymization tools) MUST be built in, while formal legal compliance, ANPDP declaration, and production hosting/processor jurisdiction (`DEC-10`, `DEC-11`) are gated on review by qualified Algerian legal counsel before production launch.
 
 ## Spec-Driven Development Workflow & Quality Gates
 
-Every feature slice after Phase 0 MUST follow the 11-step Spec Kit workflow exposed by the Antigravity (`agy`) integration (detailed in [`docs/ai-development-workflow.md`](../../docs/ai-development-workflow.md)):
+Every feature slice after Phase 0 approval MUST follow the 11-step Spec Kit workflow exposed by the Antigravity (`agy`) integration (detailed in [`docs/ai-development-workflow.md`](../../docs/ai-development-workflow.md)):
 
 1. `/speckit-specify` — Draft the feature specification (`spec.md`).
 2. `/speckit-clarify` — Resolve ambiguities and record clarifications.
@@ -120,13 +127,13 @@ If an architectural or security audit is needed at any step, the agent MUST paus
 
 ## Governance
 
-This Constitution is the supreme technical and process governance document for WalimApp. In the event of a conflict between this Constitution and any feature specification, plan, task list, or historical architecture draft under [`reference/architecture-drafts/`](../../reference/architecture-drafts/), this Constitution and the canonical files under [`docs/`](../../docs/) prevail.
+Once ratified by the Product Owner, this Constitution is the supreme technical and process governance document for WalimApp. In the event of a conflict between this Constitution and any feature specification, plan, task list, or historical architecture draft under [`reference/architecture-drafts/`](../../reference/architecture-drafts/), this Constitution and the canonical files under [`docs/`](../../docs/) prevail.
 
-- **Amendment Procedure**: Any amendment to this Constitution requires an explicit proposal documenting the rationale, impact on existing phases, and updated [`docs/decision-register.md`](../../docs/decision-register.md) entry, followed by explicit Product Owner approval.
+- **Ratification & Amendment Procedure**: This Constitution remains in `Draft — Pending Product Owner Ratification` status until the Product Owner explicitly approves Phase 0, at which point a ratification commit records the official `Ratified` date. Subsequent amendments require an explicit proposal documenting the rationale, impact on existing stages, and updated [`docs/decision-register.md`](../../docs/decision-register.md) entry, followed by explicit Product Owner approval.
 - **Versioning Policy**: `CONSTITUTION_VERSION` follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
   - `MAJOR`: Removal or backward-incompatible redefinition of a core principle or governance gate.
   - `MINOR`: Addition of a new principle, architectural constraint, or mandatory workflow gate.
   - `PATCH`: Wording clarifications, formatting improvements, or non-semantic refinements.
 - **Compliance Review**: Every `/speckit-plan`, `/speckit-analyze`, and pull request review MUST explicitly verify compliance with Principles I–VII. Any proposed deviation MUST be rejected unless the Constitution is formally amended first.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-29 | **Last Amended**: 2026-10-29
+**Version**: 1.2.0-draft | **Status**: Draft — Pending Product Owner Ratification | **Ratified**: Pending Product Owner Approval | **Last Amended**: 2026-10-29
