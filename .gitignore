@@ -19,6 +19,7 @@ google-services.json
 
 # --- WalimApp Licenses, Customer Backups & Local SQLite Databases ---
 *.walimlic
+issued-licenses*.jsonl
 *.walimbak
 *.pre_restore
 *.db
