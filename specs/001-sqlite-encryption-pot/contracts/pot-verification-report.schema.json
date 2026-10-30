@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PotVerificationReport",
+  "description": "Deterministic JSON verification output emitted as POT_REPORT_JSON:<json> by the WalimApp SQLite Encryption Proof of Technology runner across Android (API 24+) and Windows (x64) in debug, profile, and release build modes.",
+  "type": "object",
+  "required": [
+    "platform",
+    "build_mode",
+    "sqlite_version",
+    "active_cipher",
+    "lifecycle_roundtrip_passed",
+    "raw_file_encrypted_passed",
+    "wrong_key_rejected_notadb_passed",
+    "fail_closed_guard_passed",
+    "duration_ms",
+    "all_passed"
+  ],
+  "properties": {
+    "platform": {
+      "type": "string",
+      "enum": ["windows", "android"]
+    },
+    "build_mode": {
+      "type": "string",
+      "enum": ["debug", "profile", "release"]
+    },
+    "sqlite_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "active_cipher": {
+      "type": "string",
+      "const": "chacha20"
+    },
+    "lifecycle_roundtrip_passed": {
+      "type": "boolean",
+      "const": true
+    },
+    "raw_file_encrypted_passed": {
+      "type": "boolean",
+      "const": true
+    },
+    "wrong_key_rejected_notadb_passed": {
+      "type": "boolean",
+      "const": true
+    },
+    "fail_closed_guard_passed": {
+      "type": "boolean",
+      "const": true
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Measured execution duration in milliseconds (recorded against the < 2000ms SC-004 target)."
+    },
+    "all_passed": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
