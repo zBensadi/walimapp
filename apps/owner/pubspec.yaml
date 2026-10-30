@@ -1,5 +1,5 @@
 name: owner
-description: "WalimApp Owner Application — Sprint 1.1 SQLite Encryption Proof of Technology"
+description: "WalimApp Owner Application — Shared Android & Windows Venue Management"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   cupertino_icons: ^1.0.8
   drift: ^2.35.0
   sqlite3: ^3.5.2
@@ -32,3 +35,4 @@ hooks:
 
 flutter:
   uses-material-design: true
+  generate: true

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://walimapp.local/schemas/owner-preferences.schema.json",
+  "title": "OwnerAppLocalePreferences",
+  "description": "Local JSON persistence contract for independent UI language (language_pref) and default document language (default_doc_lang) in apps/owner (FR-009).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "language_pref",
+    "default_doc_lang"
+  ],
+  "properties": {
+    "language_pref": {
+      "type": "string",
+      "enum": ["ar", "fr", "en"],
+      "description": "Persisted user interface language code (ar = Arabic RTL, fr = French LTR, en = English LTR)."
+    },
+    "default_doc_lang": {
+      "type": "string",
+      "enum": ["ar", "fr", "en"],
+      "description": "Independently persisted default language code for future generated PDF contracts and receipts."
+    }
+  }
+}
