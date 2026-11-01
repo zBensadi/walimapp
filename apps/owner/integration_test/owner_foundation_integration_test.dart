@@ -35,7 +35,7 @@ void main() {
       expect(shellController.currentDestination, OwnerNavDestination.dashboard);
 
       // Step 3: Switch UI language to Arabic (ar RTL)
-      localeController.setUiLanguage(SupportedAppLanguage.ar);
+      await localeController.setUiLanguage(SupportedAppLanguage.ar);
       await tester.pumpAndSettle();
 
       expect(localeController.uiLanguage, SupportedAppLanguage.ar);
@@ -54,15 +54,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(shellController.currentDestination, OwnerNavDestination.settings);
 
-      localeController.setDefaultDocumentLanguage(SupportedAppLanguage.en);
+      await localeController.setDefaultDocumentLanguage(SupportedAppLanguage.en);
       await tester.pumpAndSettle();
 
       expect(localeController.uiLanguage, SupportedAppLanguage.ar);
       expect(localeController.defaultDocumentLanguage, SupportedAppLanguage.en);
 
       // Step 5: Verify independent persistence to disk
-      // Allow async write to complete
-      await Future<void>.delayed(const Duration(milliseconds: 300));
       final reloadedFromDisk = await repository.loadPreferences(osLanguageCode: 'fr');
       expect(reloadedFromDisk.uiLanguage, SupportedAppLanguage.ar);
       expect(reloadedFromDisk.defaultDocumentLanguage, SupportedAppLanguage.en);

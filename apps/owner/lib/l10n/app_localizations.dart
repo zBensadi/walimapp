@@ -285,24 +285,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Version'**
   String get appVersionLabel;
-
-  /// No description provided for @languageArabic.
-  ///
-  /// In en, this message translates to:
-  /// **'العربية'**
-  String get languageArabic;
-
-  /// No description provided for @languageFrench.
-  ///
-  /// In en, this message translates to:
-  /// **'Français'**
-  String get languageFrench;
-
-  /// No description provided for @languageEnglish.
-  ///
-  /// In en, this message translates to:
-  /// **'English'**
-  String get languageEnglish;
 }
 
 class _AppLocalizationsDelegate

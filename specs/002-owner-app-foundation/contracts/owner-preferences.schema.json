@@ -6,10 +6,16 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "language_pref",
     "default_doc_lang"
   ],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version indicator for forward-compatible migrations."
+    },
     "language_pref": {
       "type": "string",
       "enum": ["ar", "fr", "en"],

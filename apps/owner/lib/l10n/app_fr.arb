@@ -30,8 +30,5 @@
   "settingsDiagnosticsSection": "Diagnostics de l'application",
   "platformLabel": "Plateforme",
   "buildModeLabel": "Mode de compilation",
-  "appVersionLabel": "Version",
-  "languageArabic": "العربية",
-  "languageFrench": "Français",
-  "languageEnglish": "English"
+  "appVersionLabel": "Version"
 }

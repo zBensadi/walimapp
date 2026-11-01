@@ -40,6 +40,16 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: OwnerTheme.spacingMedium),
 
+              // Language Preferences Section (F-07)
+              Text(
+                l10n.settingsLanguageSection,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: OwnerTheme.textPrimary,
+                    ),
+              ),
+              const SizedBox(height: OwnerTheme.spacingSmall),
+
               // UI Language Selector (language_pref)
               LanguageSelectorCard(
                 title: l10n.uiLanguageLabel,
@@ -125,12 +135,15 @@ class _DiagnosticRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: OwnerTheme.spacingSmall),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: OwnerTheme.textPrimary,
-              ),
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: OwnerTheme.textPrimary,
+                ),
+          ),
         ),
       ],
     );

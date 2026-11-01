@@ -43,6 +43,16 @@ class DashboardScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Destination Title in Workspace (F-05)
+              Text(
+                l10n.dashboardTitle,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: OwnerTheme.textPrimary,
+                    ),
+              ),
+              const SizedBox(height: OwnerTheme.spacingMedium),
+
               // Header Card
               Card(
                 color: OwnerTheme.primaryBurgundy,
@@ -75,13 +85,29 @@ class DashboardScreen extends StatelessWidget {
                           color: Colors.white.withAlpha(40),
                           borderRadius: BorderRadius.circular(OwnerTheme.radiusSmall),
                         ),
-                        child: Text(
-                          '${l10n.environmentStatus}: ${env.summary}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              '${l10n.environmentStatus}: ',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Text(
+                                env.summary,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

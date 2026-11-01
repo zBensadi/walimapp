@@ -56,27 +56,31 @@ class AppLocaleController extends ChangeNotifier {
 
   /// Sets the active UI language, updating in-memory state immediately and persisting asynchronously.
   ///
+  /// Returns a [Future] completing when local persistence finishes.
   /// Guaranteed not to revert the active in-memory selection or crash if persistence fails.
-  void setUiLanguage(SupportedAppLanguage newLanguage) {
-    if (_currentPreference.uiLanguage == newLanguage) return;
+  Future<void> setUiLanguage(SupportedAppLanguage newLanguage) {
+    final changed = _currentPreference.uiLanguage != newLanguage;
+    if (changed) {
+      _currentPreference = _currentPreference.copyWithUiLanguage(newLanguage);
+      notifyListeners();
+    }
 
-    _currentPreference = _currentPreference.copyWithUiLanguage(newLanguage);
-    notifyListeners();
-
-    _persistCurrentPreferences();
+    return _persistCurrentPreferences();
   }
 
   /// Sets the default document language, updating in-memory state immediately and persisting asynchronously.
   ///
+  /// Returns a [Future] completing when local persistence finishes.
   /// Guaranteed not to revert the active in-memory selection or crash if persistence fails.
-  void setDefaultDocumentLanguage(SupportedAppLanguage newLanguage) {
-    if (_currentPreference.defaultDocumentLanguage == newLanguage) return;
+  Future<void> setDefaultDocumentLanguage(SupportedAppLanguage newLanguage) {
+    final changed = _currentPreference.defaultDocumentLanguage != newLanguage;
+    if (changed) {
+      _currentPreference =
+          _currentPreference.copyWithDefaultDocumentLanguage(newLanguage);
+      notifyListeners();
+    }
 
-    _currentPreference =
-        _currentPreference.copyWithDefaultDocumentLanguage(newLanguage);
-    notifyListeners();
-
-    _persistCurrentPreferences();
+    return _persistCurrentPreferences();
   }
 
   Future<void> _persistCurrentPreferences() async {

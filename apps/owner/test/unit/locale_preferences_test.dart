@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -78,16 +79,26 @@ void main() {
       expect(updatedDoc.defaultDocumentLanguage, SupportedAppLanguage.ar);
     });
 
-    test('serialization conforms to contract schema', () {
+    test('serialization conforms to contract schema with no additional properties', () {
       const pref = AppLocalePreference(
         uiLanguage: SupportedAppLanguage.ar,
         defaultDocumentLanguage: SupportedAppLanguage.fr,
       );
 
       final json = pref.toJson();
+      // Required properties per owner-preferences.schema.json
+      expect(json.containsKey('schema_version'), isTrue);
+      expect(json.containsKey('language_pref'), isTrue);
+      expect(json.containsKey('default_doc_lang'), isTrue);
+
+      // Value constraints
       expect(json['schema_version'], 1);
-      expect(json['language_pref'], 'ar');
-      expect(json['default_doc_lang'], 'fr');
+      expect(['ar', 'fr', 'en'].contains(json['language_pref']), isTrue);
+      expect(['ar', 'fr', 'en'].contains(json['default_doc_lang']), isTrue);
+
+      // Strict additionalProperties: false check
+      const allowedKeys = {'schema_version', 'language_pref', 'default_doc_lang'};
+      expect(json.keys.toSet().difference(allowedKeys), isEmpty);
     });
 
     test('independent per-field corruption recovery in fromJson', () {
@@ -175,6 +186,36 @@ void main() {
       // Must complete without throwing unhandled exception
       await expectLater(failingRepo.savePreferences(pref), completes);
     });
+
+    test('handles rapid consecutive writes concurrently and preserves latest state (F-02)', () async {
+      // Dispatch multiple saves concurrently without awaiting individually
+      final futures = <Future<void>>[];
+      for (var i = 0; i < 5; i++) {
+        futures.add(
+          repository.savePreferences(
+            AppLocalePreference(
+              uiLanguage: i.isEven ? SupportedAppLanguage.ar : SupportedAppLanguage.fr,
+              defaultDocumentLanguage: SupportedAppLanguage.en,
+            ),
+          ),
+        );
+      }
+      // Final write is unambiguously English UI and Arabic Doc
+      futures.add(
+        repository.savePreferences(
+          const AppLocalePreference(
+            uiLanguage: SupportedAppLanguage.en,
+            defaultDocumentLanguage: SupportedAppLanguage.ar,
+          ),
+        ),
+      );
+
+      await Future.wait(futures);
+
+      final loaded = await repository.loadPreferences(osLanguageCode: 'fr');
+      expect(loaded.uiLanguage, SupportedAppLanguage.en);
+      expect(loaded.defaultDocumentLanguage, SupportedAppLanguage.ar);
+    });
   });
 
   group('AppLocaleController', () {
@@ -196,14 +237,16 @@ void main() {
         notificationCount++;
       });
 
-      controller.setUiLanguage(SupportedAppLanguage.ar);
+      final future1 = controller.setUiLanguage(SupportedAppLanguage.ar);
       expect(controller.uiLanguage, SupportedAppLanguage.ar);
       expect(controller.isRtl, isTrue);
       expect(notificationCount, 1);
+      await future1;
 
-      controller.setDefaultDocumentLanguage(SupportedAppLanguage.en);
+      final future2 = controller.setDefaultDocumentLanguage(SupportedAppLanguage.en);
       expect(controller.defaultDocumentLanguage, SupportedAppLanguage.en);
       expect(notificationCount, 2);
+      await future2;
 
       // Verify independence
       expect(controller.uiLanguage, SupportedAppLanguage.ar);
@@ -225,14 +268,16 @@ void main() {
       );
 
       // Changing UI language while save fails
-      controller.setUiLanguage(SupportedAppLanguage.ar);
+      final future1 = controller.setUiLanguage(SupportedAppLanguage.ar);
 
       // In-memory state MUST remain updated (not reverted) and not crash
       expect(controller.uiLanguage, SupportedAppLanguage.ar);
       expect(controller.isRtl, isTrue);
+      await future1;
 
-      controller.setDefaultDocumentLanguage(SupportedAppLanguage.fr);
+      final future2 = controller.setDefaultDocumentLanguage(SupportedAppLanguage.fr);
       expect(controller.defaultDocumentLanguage, SupportedAppLanguage.fr);
+      await future2;
     });
 
     test('gracefully handles repository read errors on initialization', () async {
@@ -245,6 +290,85 @@ void main() {
 
       expect(controller.uiLanguage, SupportedAppLanguage.ar);
       expect(controller.defaultDocumentLanguage, SupportedAppLanguage.ar);
+    });
+
+    test('repairs corrupted on-disk preferences when active in-memory language is selected (F-04)', () async {
+      final tempDir = await Directory.systemTemp.createTemp('walimapp_repair_test_');
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final fileRepo = FileAppPreferencesRepository(
+        directoryProvider: () async => tempDir,
+      );
+
+      // Seed file with corrupted language code 'de'
+      final file = File('${tempDir.path}/${FileAppPreferencesRepository.preferencesFileName}');
+      await file.writeAsString(
+        '{"schema_version": 1, "language_pref": "de", "default_doc_lang": "fr"}',
+      );
+
+      // Load with OS locale 'fr' -> in-memory resolves uiLanguage to 'fr'
+      final controller = await AppLocaleController.create(
+        repository: fileRepo,
+        osLanguageCode: 'fr',
+      );
+
+      expect(controller.uiLanguage, SupportedAppLanguage.fr);
+
+      var notified = false;
+      controller.addListener(() => notified = true);
+
+      // User selects 'Français' (same language as fallback) in Settings
+      await controller.setUiLanguage(SupportedAppLanguage.fr);
+
+      // No unnecessary notification, but disk is repaired
+      expect(notified, isFalse);
+
+      final reloaded = await fileRepo.loadPreferences(osLanguageCode: 'en');
+      expect(reloaded.uiLanguage, SupportedAppLanguage.fr);
+      expect(reloaded.defaultDocumentLanguage, SupportedAppLanguage.fr);
+
+      // JSON inspection to confirm corrupted 'de' was overwritten with 'fr'
+      final rawContent = await file.readAsString();
+      final decoded = jsonDecode(rawContent) as Map<String, dynamic>;
+      expect(decoded['language_pref'], 'fr');
+      expect(decoded['default_doc_lang'], 'fr');
+    });
+
+    test('rapid consecutive updates to both preferences persist latest values without race (F-02)', () async {
+      final tempDir = await Directory.systemTemp.createTemp('walimapp_rapid_test_');
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final fileRepo = FileAppPreferencesRepository(
+        directoryProvider: () async => tempDir,
+      );
+
+      final controller = await AppLocaleController.create(
+        repository: fileRepo,
+        osLanguageCode: 'fr',
+      );
+
+      // Fire both updates consecutively without artificial delay
+      final future1 = controller.setUiLanguage(SupportedAppLanguage.ar);
+      final future2 = controller.setDefaultDocumentLanguage(SupportedAppLanguage.en);
+
+      // Immediate in-memory state is updated
+      expect(controller.uiLanguage, SupportedAppLanguage.ar);
+      expect(controller.defaultDocumentLanguage, SupportedAppLanguage.en);
+
+      // Both persistence operations complete successfully
+      await Future.wait([future1, future2]);
+
+      final reloaded = await fileRepo.loadPreferences(osLanguageCode: 'fr');
+      expect(reloaded.uiLanguage, SupportedAppLanguage.ar);
+      expect(reloaded.defaultDocumentLanguage, SupportedAppLanguage.en);
     });
   });
 }

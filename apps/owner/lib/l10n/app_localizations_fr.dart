@@ -106,13 +106,4 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get appVersionLabel => 'Version';
-
-  @override
-  String get languageArabic => 'العربية';
-
-  @override
-  String get languageFrench => 'Français';
-
-  @override
-  String get languageEnglish => 'English';
 }

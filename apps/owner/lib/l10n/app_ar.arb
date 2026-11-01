@@ -30,8 +30,5 @@
   "settingsDiagnosticsSection": "تشخيصات التطبيق",
   "platformLabel": "نظام التشغيل",
   "buildModeLabel": "نمط البناء",
-  "appVersionLabel": "الإصدار",
-  "languageArabic": "العربية",
-  "languageFrench": "Français",
-  "languageEnglish": "English"
+  "appVersionLabel": "الإصدار"
 }

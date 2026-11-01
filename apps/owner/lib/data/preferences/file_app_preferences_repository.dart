@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -20,6 +21,9 @@ class FileAppPreferencesRepository implements AppPreferencesRepository {
 
   final Future<Directory> Function() _directoryProvider;
   static const String preferencesFileName = 'owner_preferences.json';
+
+  Future<void> _writeQueue = Future.value();
+  int _tempFileCounter = 0;
 
   Future<File> _getPreferencesFile() async {
     final dir = await _directoryProvider();
@@ -60,32 +64,56 @@ class FileAppPreferencesRepository implements AppPreferencesRepository {
   }
 
   @override
-  Future<void> savePreferences(AppLocalePreference preferences) async {
-    try {
-      final dir = await _directoryProvider();
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
-
-      final targetFile = File(p.join(dir.path, preferencesFileName));
-      final tmpFile = File(p.join(dir.path, '$preferencesFileName.tmp'));
-
-      final jsonString = jsonEncode(preferences.toJson());
-      await tmpFile.writeAsString(jsonString, flush: true);
-
-      // Atomic rename
+  Future<void> savePreferences(AppLocalePreference preferences) {
+    // Chain saves onto the write queue to strictly serialize disk I/O operations
+    // and prevent concurrent writes from accessing the temporary file simultaneously (F-02).
+    final completer = Completer<void>();
+    _writeQueue = _writeQueue.then((_) async {
       try {
-        await tmpFile.rename(targetFile.path);
-      } catch (_) {
-        // Fallback for filesystems where atomic rename across boundaries fails
+        await _performAtomicSave(preferences);
+        completer.complete();
+      } catch (e, stack) {
+        debugPrint('Warning: Failed to save preferences to disk: $e\n$stack');
+        // Graceful error handling: callers are not crashed when storage writes fail
+        completer.complete();
+      }
+    }, onError: (Object e, StackTrace stack) {
+      completer.complete();
+    });
+
+    return completer.future;
+  }
+
+  Future<void> _performAtomicSave(AppLocalePreference preferences) async {
+    final dir = await _directoryProvider();
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+
+    final targetFile = File(p.join(dir.path, preferencesFileName));
+    final tmpPath = p.join(
+      dir.path,
+      '$preferencesFileName.${DateTime.now().microsecondsSinceEpoch}.${++_tempFileCounter}.tmp',
+    );
+    final tmpFile = File(tmpPath);
+
+    final jsonString = jsonEncode(preferences.toJson());
+    await tmpFile.writeAsString(jsonString, flush: true);
+
+    // Atomic rename
+    try {
+      await tmpFile.rename(targetFile.path);
+    } catch (_) {
+      // Fallback for filesystems (such as Windows) where atomic rename across boundaries fails
+      try {
         await targetFile.writeAsString(jsonString, flush: true);
+      } finally {
         if (await tmpFile.exists()) {
-          await tmpFile.delete();
+          try {
+            await tmpFile.delete();
+          } catch (_) {}
         }
       }
-    } catch (e, stack) {
-      debugPrint('Warning: Failed to save preferences to disk: $e\n$stack');
-      // Graceful error handling: callers are not crashed when storage writes fail
     }
   }
 }

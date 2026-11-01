@@ -105,13 +105,4 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get appVersionLabel => 'الإصدار';
-
-  @override
-  String get languageArabic => 'العربية';
-
-  @override
-  String get languageFrench => 'Français';
-
-  @override
-  String get languageEnglish => 'English';
 }
