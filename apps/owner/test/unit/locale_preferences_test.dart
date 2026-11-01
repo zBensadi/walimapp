@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -286,6 +287,21 @@ void main() {
       final controller = await AppLocaleController.create(
         repository: repo,
         osLanguageCode: 'ar',
+      );
+
+      expect(controller.uiLanguage, SupportedAppLanguage.ar);
+      expect(controller.defaultDocumentLanguage, SupportedAppLanguage.ar);
+    });
+
+    test('falls back deterministically when repository read exceeds loadTimeout', () async {
+      final stallingRepo = FileAppPreferencesRepository(
+        directoryProvider: () => Completer<Directory>().future,
+      );
+
+      final controller = await AppLocaleController.create(
+        repository: stallingRepo,
+        osLanguageCode: 'ar',
+        loadTimeout: const Duration(milliseconds: 50),
       );
 
       expect(controller.uiLanguage, SupportedAppLanguage.ar);

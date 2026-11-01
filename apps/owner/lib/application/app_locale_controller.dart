@@ -19,17 +19,21 @@ class AppLocaleController extends ChangeNotifier {
 
   /// Creates and initializes the controller, loading saved preferences from storage.
   ///
-  /// If the repository throws an error on read, gracefully falls back to initial
-  /// preferences without crashing.
+  /// If the repository throws an error or exceeds [loadTimeout] on read,
+  /// gracefully falls back to initial preferences without crashing or blocking startup.
   static Future<AppLocaleController> create({
     required AppPreferencesRepository repository,
     required String osLanguageCode,
+    Duration? loadTimeout,
   }) async {
     AppLocalePreference preference;
     try {
-      preference = await repository.loadPreferences(
+      final loadFuture = repository.loadPreferences(
         osLanguageCode: osLanguageCode,
       );
+      preference = loadTimeout != null
+          ? await loadFuture.timeout(loadTimeout)
+          : await loadFuture;
     } catch (e, stack) {
       debugPrint('Warning: AppLocaleController fallback during initialization: $e\n$stack');
       preference = AppLocalePreference.initial(osLanguageCode: osLanguageCode);

@@ -30,6 +30,7 @@ Future<void> main() async {
   final localeController = await AppLocaleController.create(
     repository: repository,
     osLanguageCode: osLanguageCode,
+    loadTimeout: const Duration(seconds: 2),
   );
 
   runApp(
